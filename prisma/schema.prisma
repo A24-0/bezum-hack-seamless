@@ -1,0 +1,170 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+enum MemberRole {
+  customer
+  developer
+  manager
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  review
+  done
+}
+
+enum DocStatus {
+  draft
+  review
+  approved
+}
+
+enum DocScope {
+  all
+  manager_developer
+}
+
+enum PrStatus {
+  opened
+  merged
+  closed
+}
+
+model User {
+  id               Int          @id @default(autoincrement())
+  email            String       @unique
+  passwordHash     String
+  role             UserRole     @default(user)
+  refreshTokenHash String?
+  memberships      Membership[]
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
+
+model Project {
+  id            String       @id
+  name          String
+  epochs        Epoch[]
+  memberships   Membership[]
+  notifications Notification[]
+}
+
+model Membership {
+  id        Int        @id @default(autoincrement())
+  userId    Int
+  projectId String
+  role      MemberRole
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+}
+
+model Epoch {
+  id         String      @id
+  name       String
+  projectId  String
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  documents  Document[]
+  tasks      Task[]
+  meetings   Meeting[]
+  releases   Release[]
+}
+
+model Document {
+  id            String   @id
+  title         String
+  epochId       String
+  scope         DocScope @default(all)
+  status        DocStatus @default(draft)
+  version       Int      @default(1)
+  linkedMeetingId String?
+  epoch         Epoch    @relation(fields: [epochId], references: [id], onDelete: Cascade)
+  linkedMeeting Meeting? @relation("DocumentMeeting", fields: [linkedMeetingId], references: [id])
+  taskLinks     TaskDocument[]
+}
+
+model Task {
+  id        String         @id
+  title     String
+  epochId   String
+  status    TaskStatus     @default(todo)
+  docQuote  String
+  epoch     Epoch          @relation(fields: [epochId], references: [id], onDelete: Cascade)
+  pr        PullRequest?
+  taskLinks TaskDocument[]
+  meetingLinks TaskMeeting[]
+}
+
+model TaskDocument {
+  taskId     String
+  documentId String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, documentId])
+}
+
+model Meeting {
+  id         String   @id
+  title      String
+  epochId    String
+  slots      String[]
+  pickedSlot String   @default("")
+  summary    String   @default("")
+  transcript String?
+  recording  String?
+  epoch      Epoch    @relation(fields: [epochId], references: [id], onDelete: Cascade)
+  docs       Document[] @relation("DocumentMeeting")
+  taskLinks  TaskMeeting[]
+}
+
+model TaskMeeting {
+  taskId    String
+  meetingId String
+  task      Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, meetingId])
+}
+
+model PullRequest {
+  id      String   @id
+  taskId  String   @unique
+  status  PrStatus @default(opened)
+  task    Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model Release {
+  id        String @id
+  name      String
+  epochId   String
+  tasksDone Int
+  total     Int
+  epoch     Epoch  @relation(fields: [epochId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id         String      @id
+  projectId  String
+  type       String
+  text       String
+  entityType String?
+  entityId   String?
+  role       MemberRole?
+  read       Boolean     @default(false)
+  createdAt  DateTime    @default(now())
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
