@@ -1,5 +1,6 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { MemberRole, UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CaseService } from './case.service';
 import {
@@ -8,6 +9,12 @@ import {
   ProjectEpochRoleQueryDto,
   ProjectQueryDto,
 } from './dto/case-query.dto';
+
+interface AuthRequest {
+  user: {
+    role: UserRole;
+  };
+}
 
 @ApiTags('case')
 @ApiBearerAuth()
@@ -24,14 +31,16 @@ export class CaseController {
 
   @ApiOperation({ summary: 'Get overview metrics by epoch and role' })
   @Get('overview')
-  getOverview(@Query() query: ProjectEpochRoleQueryDto) {
-    return this.caseService.getOverview(query);
+  getOverview(@Req() req: AuthRequest, @Query() query: ProjectEpochRoleQueryDto) {
+    const role = this.caseService.resolveMemberRole(req.user.role, query.role as MemberRole | undefined);
+    return this.caseService.getOverview({ ...query, role });
   }
 
   @ApiOperation({ summary: 'Get docs list with scope filtering' })
   @Get('docs')
-  getDocs(@Query() query: EpochRoleQueryDto) {
-    return this.caseService.getDocs(query);
+  getDocs(@Req() req: AuthRequest, @Query() query: EpochRoleQueryDto) {
+    const role = this.caseService.resolveMemberRole(req.user.role, query.role as MemberRole | undefined);
+    return this.caseService.getDocs({ ...query, role });
   }
 
   @ApiOperation({ summary: 'Get kanban tasks by epoch' })
@@ -60,7 +69,8 @@ export class CaseController {
 
   @ApiOperation({ summary: 'Get entity graph links by role' })
   @Get('graph')
-  getGraph(@Query() query: ProjectEpochRoleQueryDto) {
-    return this.caseService.getGraph(query);
+  getGraph(@Req() req: AuthRequest, @Query() query: ProjectEpochRoleQueryDto) {
+    const role = this.caseService.resolveMemberRole(req.user.role, query.role as MemberRole | undefined);
+    return this.caseService.getGraph({ ...query, role });
   }
 }

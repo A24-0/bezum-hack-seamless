@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DocScope, MemberRole, Prisma } from '@prisma/client';
+import { DocScope, MemberRole, Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   EpochQueryDto,
@@ -18,6 +18,14 @@ import {
 @Injectable()
 export class CaseService {
   constructor(private readonly prisma: PrismaService) {}
+
+  resolveMemberRole(userRole: UserRole, requestedRole?: MemberRole): MemberRole {
+    if (userRole === UserRole.admin) {
+      return requestedRole ?? MemberRole.manager;
+    }
+
+    return MemberRole.developer;
+  }
 
   async getContext(): Promise<ContextResponseDto> {
     const [projects, epochs] = await Promise.all([

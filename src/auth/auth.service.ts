@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { StringValue } from 'ms';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
+import { requireConfig } from './jwt.config';
 import { JwtPayload } from './types/jwt-payload.type';
 
 @Injectable()
@@ -39,18 +40,16 @@ export class AuthService {
 
   private async issueTokens(userId: number, email: string, role: JwtPayload['role']) {
     const payload: JwtPayload = { sub: userId, email, role };
-    const accessExpiresIn = (this.configService.get<string>('JWT_ACCESS_EXPIRES_IN') ??
-      '15m') as StringValue;
-    const refreshExpiresIn = (this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') ??
-      '7d') as StringValue;
+    const accessExpiresIn = (this.configService.get<string>('JWT_ACCESS_EXPIRES_IN') ?? '15m') as StringValue;
+    const refreshExpiresIn = (this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') ?? '7d') as StringValue;
 
     const accessToken = await this.jwtService.signAsync(payload, {
-      secret: this.configService.get<string>('JWT_ACCESS_SECRET', 'dev-access-secret-change-me'),
+      secret: requireConfig(this.configService, 'JWT_ACCESS_SECRET'),
       expiresIn: accessExpiresIn,
     });
 
     const refreshToken = await this.jwtService.signAsync(payload, {
-      secret: this.configService.get<string>('JWT_REFRESH_SECRET', 'dev-refresh-secret-change-me'),
+      secret: requireConfig(this.configService, 'JWT_REFRESH_SECRET'),
       expiresIn: refreshExpiresIn,
     });
 
