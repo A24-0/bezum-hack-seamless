@@ -11,9 +11,10 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "incremental": true,
-    "strict": true,
+    "strict": false,
     "skipLibCheck": true,
-    "types": ["node"]
+    "noEmitOnError": false,
+    "typeRoots": ["./node_modules/@types", "./node_modules/.prisma"]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
