@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Панель проекта</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg-glow"></div>
+    <main class="app">
+      <header class="hero card">
+        <div>
+          <p class="kicker">Панель</p>
+          <h1>Проект</h1>
+        </div>
+        <div class="hero-controls">
+          <label>
+            Роль
+            <select id="roleSelect">
+              <option value="manager">manager</option>
+              <option value="developer">developer</option>
+              <option value="customer">customer</option>
+            </select>
+          </label>
+          <div class="badge" id="roleBadge">Роль: manager</div>
+        </div>
+      </header>
+
+      <section class="grid-3 stats">
+        <article class="card metric"><span>Docs</span><strong id="mDocs">0</strong></article>
+        <article class="card metric"><span>Tasks</span><strong id="mTasks">0</strong></article>
+        <article class="card metric"><span>Meetings</span><strong id="mMeetings">0</strong></article>
+      </section>
+
+      <section class="card context">
+        <h2>Контекст</h2>
+        <div class="grid-3">
+          <label>Проект<select id="projectSelect"></select></label>
+          <label>Эпоха<select id="epochSelect"></select></label>
+          <label>API URL<input id="apiBase" value="http://localhost:3000/api" /></label>
+        </div>
+      </section>
+
+      <section class="card quick-actions">
+        <h2>Действия</h2>
+        <div class="actions">
+          <button id="scenarioTaskMeeting">Создать встречу</button>
+          <button id="scenarioDocApprove">Согласовать документ</button>
+          <button id="scenarioPrSync">Синхронизировать PR</button>
+        </div>
+        <pre id="scenarioOutput"></pre>
+      </section>
+
+      <section class="tabs">
+        <button class="tab active" data-tab="overview">Обзор</button>
+        <button class="tab" data-tab="docs">Документы</button>
+        <button class="tab" data-tab="kanban">Канбан</button>
+        <button class="tab" data-tab="meetings">Meetings</button>
+        <button class="tab" data-tab="cicd">CI/CD</button>
+        <button class="tab" data-tab="notify">Уведомления</button>
+      </section>
+
+      <section id="tab-overview" class="pane active">
+        <article class="card">
+          <h2>Структура</h2>
+          <div class="flow" id="flowMap"></div>
+        </article>
+      </section>
+
+      <section id="tab-docs" class="pane">
+        <article class="card"><h2>Документы</h2><div id="docsList" class="stack"></div></article>
+      </section>
+
+      <section id="tab-kanban" class="pane">
+        <article class="card"><h2>Канбан</h2><div id="kanbanBoard" class="kanban"></div></article>
+      </section>
+
+      <section id="tab-meetings" class="pane">
+        <article class="card"><h2>Встречи</h2><div id="meetingList" class="stack"></div></article>
+      </section>
+
+      <section id="tab-cicd" class="pane">
+        <article class="card"><h2>PR / Release</h2><div id="cicdList" class="stack"></div></article>
+      </section>
+
+      <section id="tab-notify" class="pane">
+        <article class="card"><h2>Единые уведомления</h2><div id="notificationsList" class="stack"></div></article>
+      </section>
+
+      <section class="card">
+        <h2>Связи</h2>
+        <pre id="graphOutput"></pre>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
