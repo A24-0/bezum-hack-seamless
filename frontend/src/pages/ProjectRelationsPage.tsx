@@ -11,7 +11,16 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ArrowUpRight, FileText, GitPullRequest, GripVertical, Link2, Target } from 'lucide-react'
+import {
+  ArrowUpRight,
+  ChevronRight,
+  FileText,
+  GitPullRequest,
+  GripVertical,
+  Link2,
+  Target,
+  X,
+} from 'lucide-react'
 import { cicdApi, documentsApi, epochsApi, meetingsApi, projectsApi, tasksApi } from '../api'
 import { StatusBadge } from '../components/common/StatusBadge'
 import { useUIStore } from '../stores/uiStore'
@@ -245,6 +254,19 @@ export default function ProjectRelationsPage() {
     return sum
   }, [docStatuses, taskStatuses, heatmap.counts])
 
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const selectedTask = selectedTaskId ? taskById.get(selectedTaskId) ?? null : null
+
+  // docs currently linked to the selected task (reverse lookup from linkedTaskIdsByDoc)
+  const docsLinkedToTask = useMemo(() => {
+    if (!selectedTaskId) return new Set<string>()
+    const s = new Set<string>()
+    for (const [docId, taskIds] of Object.entries(linkedTaskIdsByDoc)) {
+      if (taskIds.has(selectedTaskId)) s.add(docId)
+    }
+    return s
+  }, [selectedTaskId, linkedTaskIdsByDoc])
+
   if (!projectId) return null
 
   return (
@@ -291,9 +313,10 @@ export default function ProjectRelationsPage() {
 
           <div className="space-y-3">
             <DndContext onDragEnd={handleDragEnd}>
-              <div>
+              <div className="relative isolate">
                 <div className="text-xs text-slate-400 mb-2">Документы (перетаскивайте — порядок строк в таблице)</div>
-                <div className="max-h-64 overflow-auto rounded-lg border border-slate-700 p-2">
+                <div className="overflow-hidden rounded-lg border border-slate-700">
+                <div className="max-h-48 overflow-y-auto p-2">
                   <SortableContext items={docOrder.map((id) => `doc:${id}`)} strategy={verticalListSortingStrategy}>
                     <div className="space-y-2">
                       {orderedDocs.map((d) => (
@@ -305,9 +328,10 @@ export default function ProjectRelationsPage() {
                     </div>
                   </SortableContext>
                 </div>
+                </div>
               </div>
 
-              <div className="mt-3">
+              <div className="relative isolate mt-3">
                 <div className="text-xs text-slate-400 mb-2">Задачи (перетаскивайте — порядок столбцов в таблице)</div>
                 <div className="overflow-x-auto rounded-lg border border-slate-700 p-2">
                   <SortableContext items={taskOrder.map((id) => `task:${id}`)} strategy={horizontalListSortingStrategy}>
@@ -423,19 +447,137 @@ export default function ProjectRelationsPage() {
           <p className="text-xs text-slate-500 mb-4">Узлы графа можно тянуть; у задачи и документа — ссылка на канбан или документ.</p>
 
           <div className="space-y-4">
-            <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-950/[0.15] dark:bg-slate-950/30">
-              <RelationsGraphCanvas
-                projectId={projectId}
-                orderedDocs={orderedDocs}
-                orderedTasks={orderedTasks}
-                linkedTaskIdsByDoc={linkedTaskIdsByDoc}
-                taskById={taskById}
-                heatmapCounts={heatmap.counts}
-                heatmapMax={heatmap.max}
-                docStatuses={docStatuses}
-                taskStatuses={taskStatuses}
-              />
+            <div className="flex gap-3 min-h-[540px]">
+              <div className="w-48 shrink-0 flex flex-col border-r border-slate-700 pr-3">
+                <div className="text-xs font-medium text-slate-400 mb-2">Задачи</div>
+                <div className="flex-1 overflow-y-auto flex flex-col gap-1">
+                  {orderedTasks.length === 0 && <p className="text-xs text-slate-500 italic">Нет задач</p>}
+                  {orderedTasks.map((t) => {
+                    const isActive = selectedTaskId === String(t.id)
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setSelectedTaskId((prev) => (prev === String(t.id) ? null : String(t.id)))}
+                        className={`w-full flex flex-col items-start gap-0.5 px-2 py-1.5 rounded-lg border text-left transition-colors ${
+                          isActive
+                            ? 'border-indigo-500/70 bg-indigo-500/15'
+                            : 'border-transparent hover:border-slate-600 hover:bg-slate-800/40'
+                        }`}
+                      >
+                        <StatusBadge status={t.status} size="sm" />
+                        <span className="text-[11px] text-slate-300 leading-tight line-clamp-2">
+                          #{t.id} {t.title}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="flex-1 min-w-0 flex flex-col gap-4">
+                <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-950/[0.15] dark:bg-slate-950/30">
+                  <RelationsGraphCanvas
+                    projectId={projectId}
+                    orderedDocs={orderedDocs}
+                    orderedTasks={orderedTasks}
+                    linkedTaskIdsByDoc={linkedTaskIdsByDoc}
+                    taskById={taskById}
+                    heatmapCounts={heatmap.counts}
+                    heatmapMax={heatmap.max}
+                    docStatuses={docStatuses}
+                    taskStatuses={taskStatuses}
+                    selectedTaskId={selectedTaskId}
+                    onTaskClick={(id) => setSelectedTaskId((prev) => (prev === id ? null : id))}
+                  />
+                </div>
+
+                <p className="text-[11px] text-slate-500">
+                  Выберите задачу слева или кликните на ноду — откроется панель с описанием и управлением связями.
+                </p>
+
+                {selectedTask && (
+                  <div className="rounded-lg border border-indigo-500/40 bg-indigo-950/20 dark:bg-indigo-950/30 p-4 relative">
+                    <button
+                      type="button"
+                      className="absolute top-3 right-3 text-slate-400 hover:text-slate-200 transition-colors"
+                      onClick={() => setSelectedTaskId(null)}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+
+                    <div className="flex items-start gap-3 mb-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs text-slate-400">#{selectedTask.id}</span>
+                          <StatusBadge status={selectedTask.status} size="sm" />
+                        </div>
+                        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{selectedTask.title}</h3>
+                      </div>
+                      <Link
+                        to={`/projects/${projectId}/kanban?highlight=${selectedTask.id}`}
+                        className="shrink-0 flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300"
+                      >
+                        Открыть <ChevronRight className="w-3 h-3" />
+                      </Link>
+                    </div>
+
+                    {selectedTask.description ? (
+                      <p className="text-sm text-slate-300 dark:text-slate-300 mb-4 whitespace-pre-line leading-relaxed">
+                        {selectedTask.description}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-slate-500 italic mb-4">Описание отсутствует</p>
+                    )}
+
+                    {selectedTask.labels && selectedTask.labels.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-4">
+                        {selectedTask.labels.map((l) => (
+                          <span
+                            key={l.id}
+                            className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                            style={{ backgroundColor: l.color + '33', color: l.color, border: `1px solid ${l.color}66` }}
+                          >
+                            {l.name ?? l.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="border-t border-slate-700/50 pt-3">
+                      <div className="text-xs font-semibold text-slate-400 mb-2">Связанные документы</div>
+                      <div className="space-y-1 max-h-48 overflow-y-auto">
+                        {docs.map((d) => {
+                          const linked = docsLinkedToTask.has(String(d.id))
+                          return (
+                            <div key={d.id} className="flex items-center justify-between gap-2 py-1">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                <span className="text-xs text-slate-300 truncate">{d.title}</span>
+                                <StatusBadge status={d.status} size="sm" />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => toggleLink(String(d.id), selectedTaskId!, !linked)}
+                                className={`shrink-0 text-[11px] px-2 py-0.5 rounded border transition-colors ${
+                                  linked
+                                    ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-300 hover:bg-red-500/20 hover:border-red-500/60 hover:text-red-300'
+                                    : 'border-slate-600 text-slate-400 hover:border-indigo-500/60 hover:text-indigo-300 hover:bg-indigo-500/10'
+                                }`}
+                              >
+                                {linked ? 'Отвязать' : 'Связать'}
+                              </button>
+                            </div>
+                          )
+                        })}
+                        {docs.length === 0 && <p className="text-xs text-slate-500">Нет документов в проекте</p>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
+
             <p className="text-[11px] text-slate-500 px-1">
               Связи на графе: цвет от красного к зелёному — согласованность статусов документа и задачи и близость узлов на поле
               (перетащите карточки; дальше = холоднее). Толщина линии — «жар» пары в матрице статусов.
@@ -601,6 +743,8 @@ function RelationsGraphCanvas({
   heatmapMax,
   docStatuses,
   taskStatuses,
+  selectedTaskId,
+  onTaskClick,
 }: {
   projectId: string
   orderedDocs: Document[]
@@ -611,6 +755,8 @@ function RelationsGraphCanvas({
   heatmapMax: number
   docStatuses: readonly string[]
   taskStatuses: readonly string[]
+  selectedTaskId: string | null
+  onTaskClick: (taskId: string) => void
 }) {
   const MAX_DOCS = 9
   const MAX_TASKS = 9
@@ -918,7 +1064,9 @@ function RelationsGraphCanvas({
                 key={n.key}
                 data-node="1"
                 style={{ position: 'absolute', left: p.x, top: p.y, width: NODE_W, height: NODE_H }}
-                className={`relative px-3 py-2 rounded-xl border shadow-sm select-none cursor-grab ${color}`}
+                className={`relative px-3 py-2 rounded-xl border shadow-sm select-none cursor-grab transition-shadow ${color} ${
+                  n.kind === 'task' && selectedTaskId === n.id ? 'ring-2 ring-indigo-400 shadow-lg shadow-indigo-500/20' : ''
+                }`}
                 onPointerDown={(e) => {
                   e.stopPropagation()
                   const p0 = getGraphPoint(e.clientX, e.clientY)
@@ -927,13 +1075,16 @@ function RelationsGraphCanvas({
                   dragRef.current.offsetY = p0.y - p.y
                   dragRef.current.panning = false
                 }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (n.kind === 'task') onTaskClick(n.id)
+                }}
                 onDoubleClick={(e) => {
                   e.stopPropagation()
-                  // Snap to initial position on double-click.
                   const init = initialPositionsRef.current[n.key]
                   if (init) setPositions((prev) => ({ ...prev, [n.key]: init }))
                 }}
-                title={`${n.kind === 'doc' ? 'Документ' : 'Задача'}: ${n.title}`}
+                title={n.kind === 'task' ? `Кликните: ${n.title}` : `Документ: ${n.title}`}
               >
                 {n.kind === 'doc' ? (
                   <Link
@@ -957,8 +1108,9 @@ function RelationsGraphCanvas({
                 <div className="text-xs font-semibold pr-8">
                   {n.kind === 'doc' ? 'Док:' : 'Задача:'} {title}
                 </div>
-                <div className="mt-1">
+                <div className="mt-1 flex items-center gap-1">
                   <span className="text-[11px] opacity-80">{STATUS_LABELS[n.status] ?? n.status}</span>
+                  {n.kind === 'task' && <span className='text-[10px] opacity-40 ml-auto'>&darr;</span>}
                 </div>
               </div>
             )

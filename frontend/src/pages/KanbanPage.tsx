@@ -1,4 +1,4 @@
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { tasksApi, projectsApi, epochsApi } from '../api'
 import { useEffect, useMemo, useState } from 'react'
@@ -16,6 +16,22 @@ type TaskScope = 'all' | 'mine' | 'unassigned'
 export default function KanbanPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | undefined>(
+    searchParams.get('highlight') ?? undefined
+  )
+
+  useEffect(() => {
+    const param = searchParams.get('highlight')
+    if (!param) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('highlight')
+    setSearchParams(next, { replace: true })
+    setHighlightedTaskId(param)
+    const timer = setTimeout(() => setHighlightedTaskId(undefined), 3000)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const qc = useQueryClient()
   const { addToast } = useUIStore()
   const { user } = useAuthStore()
@@ -300,6 +316,7 @@ export default function KanbanPage() {
           tasks={visibleTasks}
           canEdit={canEdit}
           currentUserId={user?.id}
+          highlightedTaskId={highlightedTaskId}
           onStatusChange={async (taskId, status) => {
             await updateStatusMutation.mutateAsync({ taskId, status })
           }}

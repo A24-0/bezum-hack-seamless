@@ -35,6 +35,7 @@ type KanbanBoardProps = {
   tasks: Task[]
   canEdit: boolean
   currentUserId?: string
+  highlightedTaskId?: string
   onStatusChange: (taskId: number, status: TaskStatus) => Promise<void>
   onReorderColumn: (status: TaskStatus, orderedTaskIds: number[]) => Promise<void>
   onAssignSelf: (taskId: number) => Promise<void>
@@ -48,6 +49,7 @@ function TaskCardBody({
   onAssignSelf,
   assigning,
   onPickStatus,
+  isHighlighted,
 }: {
   task: Task
   dragHandleProps?: HTMLAttributes<HTMLElement>
@@ -56,10 +58,11 @@ function TaskCardBody({
   onAssignSelf: () => void
   assigning: boolean
   onPickStatus?: (status: TaskStatus) => void
+  isHighlighted?: boolean
 }) {
   const labelText = (task.labels ?? []).map((l) => l.label ?? l.name).filter(Boolean)
   return (
-    <div className="card p-3 shadow-sm hover:border-indigo-500/40 transition-colors">
+    <div className={cn('card p-3 shadow-sm hover:border-indigo-500/40 transition-colors', isHighlighted && 'ring-2 ring-indigo-400 border-indigo-500/60 shadow-indigo-500/20 shadow-md')}>
       <div className="flex gap-2">
         {canEdit && dragHandleProps && (
           <button
@@ -160,6 +163,7 @@ function DraggableTask({
   onAssignSelf,
   assigning,
   onPickStatus,
+  isHighlighted,
 }: {
   task: Task
   canEdit: boolean
@@ -167,6 +171,7 @@ function DraggableTask({
   onAssignSelf: () => void
   assigning: boolean
   onPickStatus?: (status: TaskStatus) => void
+  isHighlighted?: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: DRAG_TASK(task.id),
@@ -175,11 +180,17 @@ function DraggableTask({
   const style = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined
+  const highlightRef = (el: HTMLDivElement | null) => {
+    setNodeRef(el)
+    if (el && isHighlighted) {
+      setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
+    }
+  }
 
   return (
     <div
       id={`task-${task.id}`}
-      ref={setNodeRef}
+      ref={highlightRef}
       style={style}
       className={cn('scroll-mt-24 rounded-xl', isDragging && 'opacity-40')}
     >
@@ -191,6 +202,7 @@ function DraggableTask({
         onAssignSelf={onAssignSelf}
         assigning={assigning}
         onPickStatus={onPickStatus}
+        isHighlighted={isHighlighted}
       />
     </div>
   )
@@ -204,6 +216,7 @@ function KanbanColumn({
   onAssignSelf,
   assigningId,
   onStatusChange,
+  highlightedTaskId,
 }: {
   status: TaskStatus
   tasksInCol: Task[]
@@ -212,6 +225,7 @@ function KanbanColumn({
   onAssignSelf: (taskId: number) => void
   assigningId: number | null
   onStatusChange: (taskId: number, status: TaskStatus) => Promise<void>
+  highlightedTaskId?: string
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `droppable-${status}`,
@@ -235,16 +249,13 @@ function KanbanColumn({
             key={t.id}
             task={t}
             canEdit={canEdit}
-            showAssignSelf={
-              canEdit &&
-              !t.assignee &&
-              !!currentUserId
-            }
+            showAssignSelf={canEdit && !t.assignee && !!currentUserId}
             onAssignSelf={() => onAssignSelf(Number(t.id))}
             assigning={assigningId === Number(t.id)}
             onPickStatus={(st) => {
               if (st !== t.status) void onStatusChange(Number(t.id), st)
             }}
+            isHighlighted={highlightedTaskId === String(t.id)}
           />
         ))}
         {tasksInCol.length === 0 && (
@@ -255,7 +266,15 @@ function KanbanColumn({
   )
 }
 
-function StaticColumn({ status, tasksInCol }: { status: TaskStatus; tasksInCol: Task[] }) {
+function StaticColumn({
+  status,
+  tasksInCol,
+  highlightedTaskId,
+}: {
+  status: TaskStatus
+  tasksInCol: Task[]
+  highlightedTaskId?: string
+}) {
   return (
     <div className="min-w-[272px] max-w-[320px] flex-1 flex flex-col">
       <div className="text-sm font-medium text-slate-700 dark:text-slate-200 mb-2 flex items-center justify-between px-0.5">
@@ -271,6 +290,7 @@ function StaticColumn({ status, tasksInCol }: { status: TaskStatus; tasksInCol: 
               showAssignSelf={false}
               onAssignSelf={() => {}}
               assigning={false}
+              isHighlighted={highlightedTaskId === String(t.id)}
             />
           </div>
         ))}
@@ -283,6 +303,7 @@ export function KanbanBoard({
   tasks,
   canEdit,
   currentUserId,
+  highlightedTaskId,
   onStatusChange,
   onReorderColumn,
   onAssignSelf,
@@ -375,7 +396,7 @@ export function KanbanBoard({
     return (
       <div className="flex gap-4 overflow-x-auto pb-3 -mx-1 px-1">
         {COLUMNS.map((col) => (
-          <StaticColumn key={col} status={col} tasksInCol={grouped[col]} />
+          <StaticColumn key={col} status={col} tasksInCol={grouped[col]} highlightedTaskId={highlightedTaskId} />
         ))}
       </div>
     )
@@ -400,6 +421,7 @@ export function KanbanBoard({
             onAssignSelf={handleAssign}
             assigningId={assigningId}
             onStatusChange={onStatusChange}
+            highlightedTaskId={highlightedTaskId}
           />
         ))}
       </div>
