@@ -48,6 +48,20 @@ async def list_prs(
     ]
 
 
+@router.post("/projects/{project_id}/sync")
+async def sync_gitlab(
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Placeholder manual sync endpoint.
+    Real sync is driven by GitLab webhooks (`/webhooks/gitlab`).
+    """
+    await require_manager_or_developer(db, project_id, current_user)
+    return {"status": "ok", "message": "Use /webhooks/gitlab for real-time sync from GitLab"}
+
+
 @router.post("/projects/{project_id}/prs/{pr_id}/link")
 async def link_pr_to_task(
     project_id: int,

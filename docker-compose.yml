@@ -1,46 +1,56 @@
-version: '3.9'
-
 services:
   db:
     image: postgres:16-alpine
-    restart: always
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: seamless
-      POSTGRES_USER: seamless
-      POSTGRES_PASSWORD: seamless
+      POSTGRES_DB: ${POSTGRES_DB:-seamless}
+      POSTGRES_USER: ${POSTGRES_USER:-seamless}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-seamless}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U seamless"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-seamless}"]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 10s
 
   backend:
     build: ./backend
-    restart: always
+    restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+asyncpg://seamless:seamless@db:5432/seamless
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-seamless}:${POSTGRES_PASSWORD:-seamless}@db:5432/${POSTGRES_DB:-seamless}
       SECRET_KEY: ${SECRET_KEY:-supersecretkey_change_in_production}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       JITSI_DOMAIN: ${JITSI_DOMAIN:-meet.jit.si}
-    ports:
-      - "8000:8000"
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
 
   frontend:
     build: ./frontend
-    restart: always
-    ports:
-      - "80:80"
+    restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   postgres_data:

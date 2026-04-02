@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 import { useNotifications } from './hooks/useNotifications'
 import { ToastContainer } from './components/common/Toast'
+import { ThemeSync } from './components/ThemeSync'
 
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -18,6 +19,7 @@ import MeetingDetailPage from './pages/MeetingDetailPage'
 import CICDPage from './pages/CICDPage'
 import MembersPage from './pages/MembersPage'
 import NotificationsPage from './pages/NotificationsPage'
+import ProjectRelationsPage from './pages/ProjectRelationsPage'
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
@@ -35,6 +37,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <ThemeSync />
       {token && <NotificationsListener />}
       <ToastContainer />
       <Routes>
@@ -63,6 +66,7 @@ export default function App() {
             <Route path="meetings" element={<MeetingsPage />} />
             <Route path="meetings/:meetingId" element={<MeetingDetailPage />} />
             <Route path="cicd" element={<CICDPage />} />
+            <Route path="relations" element={<ProjectRelationsPage />} />
             <Route path="members" element={<MembersPage />} />
           </Route>
         </Route>

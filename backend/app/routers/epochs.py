@@ -103,6 +103,8 @@ async def update_epoch(
         raise HTTPException(404, "Epoch not found")
     for field, val in data.model_dump(exclude_unset=True).items():
         setattr(epoch, field, val)
+    if epoch.start_date and epoch.end_date and epoch.end_date < epoch.start_date:
+        raise HTTPException(400, "Дата окончания не может быть раньше даты начала")
     await db.flush()
     return _epoch_dict(epoch)
 

@@ -84,6 +84,7 @@ async def create_task(
     task = Task(project_id=project_id, reporter_id=current_user.id, **data.model_dump())
     db.add(task)
     await db.flush()
+    await db.refresh(task)
     await db.refresh(task, ["assignee", "reporter", "labels", "watchers"])
     if task.assignee_id and task.assignee_id != current_user.id:
         await create_notification(db, task.assignee_id, NotificationType.mention, f"Task assigned: {task.title}", f"You were assigned to task '{task.title}'", "task", str(task.id))
@@ -127,12 +128,22 @@ async def update_task(
     if not task:
         raise HTTPException(404, "Task not found")
     old_assignee = task.assignee_id
+    task_title = task.title
     for field, val in data.model_dump(exclude_unset=True).items():
         setattr(task, field, val)
     await db.flush()
     # Notify new assignee
     if task.assignee_id and task.assignee_id != old_assignee:
-        await create_notification(db, task.assignee_id, NotificationType.mention, f"Task assigned: {task.title}", f"You were assigned to '{task.title}'", "task", str(task.id))
+        await create_notification(
+            db,
+            task.assignee_id,
+            NotificationType.mention,
+            f"Task assigned: {task_title}",
+            f"You were assigned to '{task_title}'",
+            "task",
+            str(task.id),
+        )
+    await db.refresh(task)
     await db.refresh(task, ["assignee", "reporter", "labels", "watchers"])
     return _task_dict(task)
 
@@ -155,6 +166,7 @@ async def update_task_status(
     if not task:
         raise HTTPException(404, "Task not found")
     old_status = task.status
+    task_title = task.title
     task.status = data.status
     await db.flush()
     # Notify watchers and assignee
@@ -162,7 +174,16 @@ async def update_task_status(
     if task.assignee_id:
         watcher_ids.append(task.assignee_id)
     watcher_ids = [uid for uid in watcher_ids if uid != current_user.id]
-    await notify_many(db, watcher_ids, NotificationType.task_status_changed, f"Task status changed: {task.title}", f"Status changed from {old_status} to {data.status}", "task", str(task.id))
+    await notify_many(
+        db,
+        watcher_ids,
+        NotificationType.task_status_changed,
+        f"Task status changed: {task_title}",
+        f"Status changed from {old_status} to {data.status}",
+        "task",
+        str(task.id),
+    )
+    await db.refresh(task)
     await db.refresh(task, ["assignee", "reporter", "labels", "watchers"])
     return _task_dict(task)
 

@@ -111,9 +111,9 @@ export type MeetingStatus =
   | 'cancelled'
 
 export interface MeetingParticipant {
-  id: string
-  user: User
-  rsvp: 'accepted' | 'declined' | 'tentative' | 'pending'
+  user_id: number
+  status: 'accepted' | 'declined' | 'tentative' | 'pending'
+  user?: User
 }
 
 export interface TimeSlot {
@@ -139,6 +139,13 @@ export interface Meeting {
   participants: MeetingParticipant[]
   linked_documents?: Document[]
   time_slots?: TimeSlot[]
+  time_proposals?: Array<{
+    id: number
+    proposed_at: string
+    proposed_by_id: number
+    vote_count: number
+    votes: Record<string, boolean>
+  }>
   created_by: User
   created_at: string
 }

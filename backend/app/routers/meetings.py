@@ -13,6 +13,7 @@ from app.services.auth import get_current_user
 from app.services.notification import create_notification, notify_many
 from app.services.summarization import summarize_transcript
 from app.utils.permissions import require_project_access, require_manager_or_developer
+from app.utils.meeting_datetime import assert_reasonable_meeting_datetime
 
 router = APIRouter(prefix="/projects/{project_id}/meetings", tags=["meetings"])
 
@@ -102,7 +103,14 @@ async def create_meeting(
         status=MeetingStatus.scheduling,
     )
     if data.get("scheduled_at"):
-        meeting.scheduled_at = datetime.fromisoformat(data["scheduled_at"])
+        try:
+            sa = datetime.fromisoformat(str(data["scheduled_at"]).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            raise HTTPException(400, "Некорректная дата/время встречи")
+        try:
+            meeting.scheduled_at = assert_reasonable_meeting_datetime(sa)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
         meeting.status = MeetingStatus.scheduled
 
     db.add(meeting)
@@ -116,10 +124,19 @@ async def create_meeting(
 
     # Add time proposals if provided
     for slot in data.get("time_slots", []):
+        try:
+            pa = datetime.fromisoformat(str(slot).replace("Z", "+00:00"))
+            pa = assert_reasonable_meeting_datetime(pa)
+        except ValueError as e:
+            if "Дата встречи" in str(e):
+                raise HTTPException(400, str(e))
+            raise HTTPException(400, "Некорректная дата/время в слоте")
+        except TypeError:
+            raise HTTPException(400, "Некорректная дата/время в слоте")
         tp = MeetingTimeProposal(
             meeting_id=meeting.id,
             proposed_by_id=current_user.id,
-            proposed_at=datetime.fromisoformat(slot),
+            proposed_at=pa,
             votes={},
         )
         db.add(tp)
@@ -178,7 +195,15 @@ async def update_meeting(
         if field in data:
             setattr(meeting, field, data[field])
     if "scheduled_at" in data and data["scheduled_at"]:
-        meeting.scheduled_at = datetime.fromisoformat(data["scheduled_at"])
+        try:
+            sa = datetime.fromisoformat(str(data["scheduled_at"]).replace("Z", "+00:00"))
+            meeting.scheduled_at = assert_reasonable_meeting_datetime(sa)
+        except ValueError as e:
+            if "Дата встречи" in str(e):
+                raise HTTPException(400, str(e))
+            raise HTTPException(400, "Некорректная дата/время встречи")
+        except TypeError:
+            raise HTTPException(400, "Некорректная дата/время встречи")
     await db.flush()
     return _meeting_dict(meeting)
 
@@ -195,10 +220,19 @@ async def propose_times(
     slots = data.get("slots", [])
     created = []
     for slot in slots:
+        try:
+            proposed_at = datetime.fromisoformat(str(slot).replace("Z", "+00:00"))
+            proposed_at = assert_reasonable_meeting_datetime(proposed_at)
+        except ValueError as e:
+            if "Дата встречи" in str(e):
+                raise HTTPException(400, str(e))
+            raise HTTPException(400, "Некорректная дата/время в слоте")
+        except TypeError:
+            raise HTTPException(400, "Некорректная дата/время в слоте")
         tp = MeetingTimeProposal(
             meeting_id=meeting_id,
             proposed_by_id=current_user.id,
-            proposed_at=datetime.fromisoformat(slot),
+            proposed_at=proposed_at,
             votes={},
         )
         db.add(tp)

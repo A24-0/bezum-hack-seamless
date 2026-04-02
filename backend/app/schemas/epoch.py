@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from app.models.epoch import EpochStatus
 
@@ -15,7 +15,11 @@ class EpochBase(BaseModel):
 
 
 class EpochCreate(EpochBase):
-    pass
+    @model_validator(mode="after")
+    def dates_order(self) -> "EpochCreate":
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            raise ValueError("Дата окончания не может быть раньше даты начала")
+        return self
 
 
 class EpochUpdate(BaseModel):

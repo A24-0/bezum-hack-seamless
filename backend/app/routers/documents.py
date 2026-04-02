@@ -152,6 +152,7 @@ async def create_document(
     )
     db.add(version)
     await db.flush()
+    await db.refresh(doc)
     await db.refresh(doc, ["created_by"])
     return _doc_dict(doc)
 
@@ -195,6 +196,8 @@ async def update_document(
     for field, val in data.model_dump(exclude_unset=True).items():
         setattr(doc, field, val)
     await db.flush()
+    await db.refresh(doc)
+    await db.refresh(doc, ["created_by"])
     return _doc_dict(doc)
 
 
@@ -338,6 +341,8 @@ async def restore_version(
     doc.content = version.content
     doc.current_version = new_version_num
     await db.flush()
+    await db.refresh(doc)
+    await db.refresh(doc, ["created_by"])
     return _doc_dict(doc)
 
 
@@ -356,6 +361,8 @@ async def approve_document(
         raise HTTPException(404, "Document not found")
     doc.status = DocumentStatus.approved
     await db.flush()
+    await db.refresh(doc)
+    await db.refresh(doc, ["created_by"])
     return _doc_dict(doc)
 
 

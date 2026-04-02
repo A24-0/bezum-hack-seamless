@@ -152,12 +152,12 @@ export const meetingsApi = {
     api.put<Meeting>(`/projects/${projectId}/meetings/${meetingId}`, data),
   delete: (projectId: string, meetingId: string) =>
     api.delete(`/projects/${projectId}/meetings/${meetingId}`),
-  voteSlot: (projectId: string, meetingId: string, slotId: string) =>
-    api.post(`/projects/${projectId}/meetings/${meetingId}/slots/${slotId}/vote`),
-  unvoteSlot: (projectId: string, meetingId: string, slotId: string) =>
-    api.delete(`/projects/${projectId}/meetings/${meetingId}/slots/${slotId}/vote`),
-  finalizeTime: (projectId: string, meetingId: string, slotId: string) =>
-    api.post<Meeting>(`/projects/${projectId}/meetings/${meetingId}/finalize`, { slot_id: slotId }),
+  proposeTimes: (projectId: string, meetingId: string, slots: string[]) =>
+    api.post(`/projects/${projectId}/meetings/${meetingId}/time-proposals`, { slots }),
+  voteSlot: (projectId: string, meetingId: string, proposalId: string, available = true) =>
+    api.post(`/projects/${projectId}/meetings/${meetingId}/time-proposals/${proposalId}/vote`, { available }),
+  finalizeTime: (projectId: string, meetingId: string, proposalId?: string) =>
+    api.post<Meeting>(`/projects/${projectId}/meetings/${meetingId}/finalize-time`, { proposal_id: proposalId }),
   uploadTranscript: (projectId: string, meetingId: string, transcript: string) =>
     api.post<Meeting>(`/projects/${projectId}/meetings/${meetingId}/transcript`, { transcript }),
   summarize: (projectId: string, meetingId: string) =>

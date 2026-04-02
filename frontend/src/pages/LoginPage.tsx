@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Layers } from 'lucide-react'
+import { ThemeToggleButton } from '../components/common/ThemeToggleButton'
 import { authApi } from '../api'
 import { useAuthStore } from '../stores/authStore'
 
@@ -21,25 +22,28 @@ export default function LoginPage() {
       login(res.data.access_token, res.data.user)
       navigate('/projects')
     } catch {
-      setError('Invalid email or password')
+      setError('Неверный email или пароль')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
+    <div className="relative min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-900 px-4">
+      <div className="absolute top-4 right-4">
+        <ThemeToggleButton />
+      </div>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Layers className="w-8 h-8 text-indigo-400" />
-            <span className="text-2xl font-bold text-white">Seamless</span>
+            <span className="text-2xl font-bold text-slate-900 dark:text-white">Seamless</span>
           </div>
-          <p className="text-slate-400 text-sm">Unified project management platform</p>
+          <p className="text-slate-400 text-sm">Единая платформа управления проектами</p>
         </div>
 
         <div className="card p-6">
-          <h1 className="text-lg font-semibold text-white mb-6">Sign in</h1>
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">Вход</h1>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="label">Email</label>
@@ -53,7 +57,7 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="label">Password</label>
+              <label className="label">Пароль</label>
               <input
                 type="password"
                 className="input"
@@ -65,20 +69,20 @@ export default function LoginPage() {
             </div>
             {error && <p className="text-red-400 text-sm">{error}</p>}
             <button type="submit" className="btn-primary w-full" disabled={loading}>
-              {loading ? 'Signing in...' : 'Sign in'}
+              {loading ? 'Вход…' : 'Войти'}
             </button>
           </form>
 
           <div className="mt-4 text-center text-sm text-slate-400">
-            No account?{' '}
+            Нет аккаунта?{' '}
             <Link to="/register" className="text-indigo-400 hover:text-indigo-300">
-              Register
+              Регистрация
             </Link>
           </div>
         </div>
 
         <div className="mt-4 card p-3 text-xs text-slate-400">
-          <div className="font-medium text-slate-300 mb-1">Demo accounts:</div>
+          <div className="font-medium text-slate-300 mb-1">Демо-аккаунты:</div>
           <div>manager@demo.com / password</div>
           <div>dev@demo.com / password</div>
           <div>client@demo.com / password</div>

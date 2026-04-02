@@ -10,10 +10,10 @@ const ICON_MAP = {
 }
 
 const COLOR_MAP = {
-  success: 'border-green-500/30 bg-slate-800',
-  error: 'border-red-500/30 bg-slate-800',
-  info: 'border-blue-500/30 bg-slate-800',
-  warning: 'border-yellow-500/30 bg-slate-800',
+  success: 'border-green-500/30 bg-white dark:bg-slate-800',
+  error: 'border-red-500/30 bg-white dark:bg-slate-800',
+  info: 'border-blue-500/30 bg-white dark:bg-slate-800',
+  warning: 'border-yellow-500/30 bg-white dark:bg-slate-800',
 }
 
 export function ToastContainer() {
@@ -33,9 +33,9 @@ export function ToastContainer() {
         >
           <div className="mt-0.5">{ICON_MAP[toast.type]}</div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-slate-100">{toast.title}</p>
+            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{toast.title}</p>
             {toast.body && (
-              <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{toast.body}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 line-clamp-2">{toast.body}</p>
             )}
           </div>
           <button

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { readStoredDark } from '../lib/theme'
 
 interface Toast {
   id: string
@@ -16,18 +17,9 @@ interface UIStore {
 }
 
 export const useUIStore = create<UIStore>((set) => ({
-  darkMode: true,
+  darkMode: readStoredDark(),
   toasts: [],
-  toggleDarkMode: () =>
-    set((state) => {
-      const next = !state.darkMode
-      if (next) {
-        document.documentElement.classList.add('dark')
-      } else {
-        document.documentElement.classList.remove('dark')
-      }
-      return { darkMode: next }
-    }),
+  toggleDarkMode: () => set((state) => ({ darkMode: !state.darkMode })),
   addToast: (toast) => {
     const id = Math.random().toString(36).slice(2)
     set((state) => ({ toasts: [...state.toasts, { ...toast, id }] }))

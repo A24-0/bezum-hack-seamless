@@ -1,0 +1,25 @@
+# Local development: copy to docker-compose.override.yml (auto-merged with docker compose up)
+#   cp docker-compose.override.example.yml docker-compose.override.yml
+#
+# Provides host ports + backend bind mount + uvicorn --reload.
+
+services:
+  backend:
+    ports:
+      - "${BACKEND_HOST_PORT:-8001}:8000"
+    volumes:
+      - ./backend:/app
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+      ]
+
+  frontend:
+    ports:
+      - "${FRONTEND_HOST_PORT:-8080}:80"
