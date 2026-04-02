@@ -4,7 +4,7 @@ import hashlib
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
@@ -123,11 +123,13 @@ async def sync_gitlab(
             raise HTTPException(502, detail=f"GitHub sync failed: {e!s}") from e
 
         synced = 0
+        seen_pr_numbers: set[int] = set()
         for pr in mrs:
             number = pr.get("number")
             if number is None:
                 continue
             iid = int(number)
+            seen_pr_numbers.add(iid)
             existing = await db.execute(
                 select(PullRequest).where(
                     PullRequest.project_id == project_id,
@@ -170,6 +172,12 @@ async def sync_gitlab(
                             pr_row.task_id = task_id
                         # pr_row уже существует (либо был, либо мы создали его выше)
 
+        await db.flush()
+        # Убрать записи, которых нет в GitHub (устаревший сид, «фейковые» URL) — истина только из API
+        stmt = delete(PullRequest).where(PullRequest.project_id == project_id)
+        if seen_pr_numbers:
+            stmt = stmt.where(~PullRequest.gitlab_pr_id.in_(seen_pr_numbers))
+        await db.execute(stmt)
         await db.flush()
         return {
             "status": "ok",

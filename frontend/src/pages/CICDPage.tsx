@@ -16,7 +16,7 @@ import { cicdApi, tasksApi, projectsApi } from '../api'
 import { StatusBadge } from '../components/common/StatusBadge'
 import { useUIStore } from '../stores/uiStore'
 import type { PullRequest, Release, Task, Project } from '../types'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '../lib/utils'
 import { invalidateProjectScopedData } from '../lib/invalidateProjectQueries'
 
@@ -117,6 +117,22 @@ export default function CICDPage() {
   const webhookUrl =
     typeof window !== 'undefined' ? `${window.location.origin}/api/webhooks/github` : '/api/webhooks/github'
 
+  const autoSyncDoneRef = useRef(false)
+  useEffect(() => {
+    autoSyncDoneRef.current = false
+  }, [projectId])
+
+  useEffect(() => {
+    const repo = project?.gitlab_repo_url?.trim()
+    if (!projectId || !repo || autoSyncDoneRef.current) return
+    autoSyncDoneRef.current = true
+    syncMutation.mutate(undefined, {
+      onError: () => {
+        /* тихо: нет токена / сеть — пользователь нажмёт «Синхронизировать» */
+      },
+    })
+  }, [projectId, project?.gitlab_repo_url])
+
   if (!projectId) return null
 
   return (
@@ -127,7 +143,8 @@ export default function CICDPage() {
           CI/CD и GitHub
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Синхронизация pull requests через API, вебхуки в реальном времени, привязка к задачам и релизы спринтов.
+          Список PR берётся из <strong className="text-slate-300 font-medium">GitHub API</strong> (не из «фейкового» сида): при открытии страницы и по кнопке синхронизации записи в БД
+          приводятся к ответу GitHub — лишние строки удаляются.
         </p>
       </div>
 
@@ -223,8 +240,8 @@ export default function CICDPage() {
         <div className="flex items-start gap-2 text-sm text-slate-400 max-w-xl">
           <AlertCircle className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
           <span>
-            На сервере нужен <strong className="text-slate-200">GITHUB_TOKEN</strong>. Кнопка «Синхронизировать» вызывает GitHub API
-            и обновляет список PR.
+            Для приватных репозиториев на сервере задайте <strong className="text-slate-200">GITHUB_TOKEN</strong> (scope <code className="text-indigo-300">repo</code>).
+            Публичные репо доступны без токена с лимитом API. После синка в списке только реальные PR из GitHub.
           </span>
         </div>
         <button

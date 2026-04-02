@@ -26,6 +26,267 @@ from app.models.task import Task, TaskLabel, TaskStatus, TaskWatcher
 from app.models.user import ProjectMember, ProjectMemberRole, User, UserRole, UserTech
 from app.services.auth import hash_password
 
+# Демо-проект под репозиторий хакатона (GitHub owner/repo для CI/CD и ссылок в UI)
+BEZUM_SEAMLESS_REPO = "A24-0/bezum-hack-seamless"
+BEZUM_SEAMLESS_NAME = "Bezum Platform (Seamless)"
+BEZUM_SEAMLESS_DESC = (
+    "Монорепозиторий платформы Seamless: React (Vite) + Nginx, FastAPI, PostgreSQL, один docker-compose. "
+    "Репозиторий для сдачи кейса: https://github.com/A24-0/bezum-hack-seamless — здесь же демо данных для обзора, "
+    "канбана, документов, CI/CD и страницы «Связи»."
+)
+
+
+async def _ensure_bezum_seamless_demo_bundle(
+    db,
+    manager: User,
+    dev: User,
+    customer: User,
+    dev2: User,
+    manager2: User,
+) -> None:
+    """Один проект = реальный GitHub-репо хакатона: задачи, документы, PR с кликабельными ссылками."""
+    res = await db.execute(select(Project).where(Project.gitlab_repo_url == BEZUM_SEAMLESS_REPO))
+    if res.scalar_one_or_none() is not None:
+        return
+
+    p = Project(
+        name=BEZUM_SEAMLESS_NAME,
+        description=BEZUM_SEAMLESS_DESC,
+        status=ProjectStatus.active,
+        gitlab_repo_url=BEZUM_SEAMLESS_REPO,
+    )
+    db.add(p)
+    await db.flush()
+
+    db.add_all(
+        [
+            ProjectMember(project_id=p.id, user_id=manager.id, role=ProjectMemberRole.manager),
+            ProjectMember(project_id=p.id, user_id=dev.id, role=ProjectMemberRole.developer),
+            ProjectMember(project_id=p.id, user_id=dev2.id, role=ProjectMemberRole.developer),
+            ProjectMember(project_id=p.id, user_id=customer.id, role=ProjectMemberRole.customer),
+            ProjectMember(project_id=p.id, user_id=manager2.id, role=ProjectMemberRole.manager),
+        ]
+    )
+    await db.flush()
+
+    e1 = Epoch(
+        project_id=p.id,
+        name="Спринт: интеграция и сдача",
+        goals="Связка docs/kanban/CI/CD, демо для жюри, стабильный docker-compose",
+        start_date=date.today() - timedelta(days=5),
+        end_date=date.today() + timedelta(days=9),
+        status=EpochStatus.active,
+        order_index=1,
+    )
+    e2 = Epoch(
+        project_id=p.id,
+        name="Следующий: hardening",
+        goals="Нагрузка, бэкапы, наблюдаемость",
+        start_date=date.today() + timedelta(days=10),
+        end_date=date.today() + timedelta(days=24),
+        status=EpochStatus.planning,
+        order_index=2,
+    )
+    db.add_all([e1, e2])
+    await db.flush()
+
+    def _doc(title: str, text: str) -> dict:
+        return {
+            "type": "doc",
+            "content": [
+                {"type": "heading", "attrs": {"level": 1}, "content": [{"type": "text", "text": title}]},
+                {"type": "paragraph", "content": [{"type": "text", "text": text}]},
+            ],
+        }
+
+    bt1 = Task(
+        project_id=p.id,
+        epoch_id=e1.id,
+        title="CI/CD: синхронизация PR из GitHub",
+        description="Репозиторий в разделе CI/CD: A24-0/bezum-hack-seamless. Проверить webhook и ручной sync.",
+        status=TaskStatus.in_progress,
+        reporter_id=manager.id,
+        assignee_id=dev.id,
+        order_index=1,
+    )
+    bt2 = Task(
+        project_id=p.id,
+        epoch_id=e1.id,
+        title="Документация сущностей и связей для кейса",
+        description="Описание в README/docs: проект, эпохи, документы, задачи, встречи, PR.",
+        status=TaskStatus.todo,
+        reporter_id=manager.id,
+        assignee_id=dev2.id,
+        order_index=2,
+    )
+    bt3 = Task(
+        project_id=p.id,
+        epoch_id=e1.id,
+        title="Страница «Связи»: матрица документ ↔ задача",
+        description="Показать тепловую карту и переходы на канбан по #task-id.",
+        status=TaskStatus.review,
+        reporter_id=manager.id,
+        assignee_id=dev.id,
+        order_index=3,
+    )
+    bt4 = Task(
+        project_id=p.id,
+        epoch_id=e1.id,
+        title="Прод: Caddy + TLS и smoke-check",
+        description="docker-compose.prod.yml, DOMAIN в .env, проверка /api/health и UI.",
+        status=TaskStatus.done,
+        reporter_id=manager2.id,
+        assignee_id=dev.id,
+        order_index=4,
+    )
+    bt5 = Task(
+        project_id=p.id,
+        epoch_id=e1.id,
+        title="Демо-данные и сид PostgreSQL",
+        description="SEED_DEMO_DATA=true в dev; проект с реальным URL репозитория в БД.",
+        status=TaskStatus.done,
+        reporter_id=manager.id,
+        assignee_id=dev2.id,
+        order_index=5,
+    )
+    bt6 = Task(
+        project_id=p.id,
+        epoch_id=e2.id,
+        title="Расширенные уведомления по упоминаниям",
+        status=TaskStatus.backlog,
+        reporter_id=manager.id,
+        assignee_id=dev.id,
+        order_index=6,
+    )
+    db.add_all([bt1, bt2, bt3, bt4, bt5, bt6])
+    await db.flush()
+
+    db.add_all(
+        [
+            TaskLabel(task_id=bt1.id, label="github", color="#6366f1"),
+            TaskLabel(task_id=bt1.id, label="cicd", color="#10b981"),
+            TaskLabel(task_id=bt3.id, label="ux", color="#f59e0b"),
+            TaskLabel(task_id=bt4.id, label="deploy", color="#a855f7"),
+        ]
+    )
+    await db.flush()
+
+    d1 = Document(
+        project_id=p.id,
+        epoch_id=e1.id,
+        title="Репозиторий и docker-compose",
+        content=_doc(
+            "Запуск платформы",
+            "Клон: git clone https://github.com/A24-0/bezum-hack-seamless.git. Локально: "
+            "docker compose up (см. README). Связанные задачи: #1 (CI/CD), #4 (деплой).",
+        ),
+        visibility=DocumentVisibility.public,
+        status=DocumentStatus.approved,
+        created_by_id=dev.id,
+        current_version=1,
+    )
+    d2 = Document(
+        project_id=p.id,
+        epoch_id=e1.id,
+        title="Сдача кейса Seamless",
+        content=_doc(
+            "Критерии",
+            "Связи сущностей в UX, версии документов, встречи, интеграция Kanban с PR и документами. "
+            "Задачи #2 и #3.",
+        ),
+        visibility=DocumentVisibility.managers_devs,
+        status=DocumentStatus.pending_review,
+        created_by_id=manager.id,
+        current_version=1,
+    )
+    d3 = Document(
+        project_id=p.id,
+        epoch_id=e1.id,
+        title="Чеклист демонстрации жюри",
+        content=_doc(
+            "Сценарий",
+            "1) Обзор проекта → 2) Канбан → 3) Документ с версиями → 4) CI/CD (ссылка на GitHub) → 5) Связи.",
+        ),
+        visibility=DocumentVisibility.public,
+        status=DocumentStatus.draft,
+        created_by_id=manager.id,
+        current_version=1,
+    )
+    db.add_all([d1, d2, d3])
+    await db.flush()
+
+    db.add_all(
+        [
+            DocumentVersion(
+                document_id=d1.id,
+                version_num=1,
+                content=d1.content,
+                created_by_id=dev.id,
+                change_summary="Первая версия",
+            ),
+            DocumentVersion(
+                document_id=d2.id,
+                version_num=1,
+                content=d2.content,
+                created_by_id=manager.id,
+                change_summary="Черновик для жюри",
+            ),
+            DocumentVersion(
+                document_id=d3.id,
+                version_num=1,
+                content=d3.content,
+                created_by_id=manager.id,
+                change_summary="Старт",
+            ),
+        ]
+    )
+    db.add_all(
+        [
+            DocumentTaskLink(document_id=d1.id, task_id=bt1.id, link_type=DocumentTaskLinkType.manual),
+            DocumentTaskLink(document_id=d1.id, task_id=bt4.id, link_type=DocumentTaskLinkType.auto),
+            DocumentTaskLink(document_id=d2.id, task_id=bt2.id, link_type=DocumentTaskLinkType.manual),
+            DocumentTaskLink(document_id=d2.id, task_id=bt3.id, link_type=DocumentTaskLinkType.auto),
+            DocumentTaskLink(document_id=d3.id, task_id=bt2.id, link_type=DocumentTaskLinkType.manual),
+        ]
+    )
+    await db.flush()
+
+    m_demo = Meeting(
+        project_id=p.id,
+        epoch_id=e1.id,
+        task_id=bt3.id,
+        title="Демо: связи и CI/CD",
+        description="Проход по странице Связи и разделу CI/CD с репозиторием на GitHub",
+        status=MeetingStatus.scheduled,
+        scheduled_at=datetime.now(timezone.utc) + timedelta(days=1, hours=2),
+        jitsi_room_id=str(uuid.uuid4()).replace("-", "")[:16],
+        created_by_id=manager.id,
+        summary="Кратко: показать матрицу документ↔задача и синхронизацию PR с GitHub.",
+    )
+    db.add(m_demo)
+    await db.flush()
+    db.add_all(
+        [
+            MeetingParticipant(meeting_id=m_demo.id, user_id=manager.id, status="accepted"),
+            MeetingParticipant(meeting_id=m_demo.id, user_id=dev.id, status="accepted"),
+            MeetingParticipant(meeting_id=m_demo.id, user_id=customer.id, status="pending"),
+        ]
+    )
+    await db.flush()
+
+    print(f"✅ Добавлен демо-проект «{BEZUM_SEAMLESS_NAME}» (GitHub: {BEZUM_SEAMLESS_REPO}) — PR подтягиваются только из GitHub после «Синхронизировать»")
+
+    db.add(
+        Release(
+            epoch_id=e1.id,
+            name="Alpha demo",
+            description="Первая демо-сборка для проверки сценария Seamless",
+            version_tag="v0.1.0-demo",
+            created_by_id=manager.id,
+        )
+    )
+    await db.flush()
+
 
 async def seed_demo_data():
     async with AsyncSessionLocal() as db:
@@ -135,6 +396,15 @@ async def seed_demo_data():
             # Патчим демо-проекты, у которых поле `gitlab_repo_url` осталось GitLab-URL.
             await _patch_demo_project_repos()
             await _patch_demo_user_techs()
+
+            um = (await db.execute(select(User).where(User.email == "manager@demo.com"))).scalar_one_or_none()
+            ud = (await db.execute(select(User).where(User.email == "dev@demo.com"))).scalar_one_or_none()
+            uc = (await db.execute(select(User).where(User.email == "client@demo.com"))).scalar_one_or_none()
+            uq = (await db.execute(select(User).where(User.email == "qa@demo.com"))).scalar_one_or_none()
+            uo = (await db.execute(select(User).where(User.email == "ops@demo.com"))).scalar_one_or_none()
+            if um and ud and uc and uq and uo:
+                await _ensure_bezum_seamless_demo_bundle(db, um, ud, uc, uq, uo)
+
             await db.commit()
             return
 
@@ -449,6 +719,9 @@ async def seed_demo_data():
         db.add_all([pr, pr2, pr3, pr4, pr5, pr6, pr7])
         await db.flush()
 
+        await _ensure_bezum_seamless_demo_bundle(db, manager, dev, customer, dev2, manager2)
+        await db.flush()
+
         db.add_all([
             Release(epoch_id=epoch1.id, name="Foundation release", description="Core platform baseline completed", version_tag="v0.9.0", created_by_id=manager.id),
             Release(epoch_id=epoch2.id, name="Collaboration beta", description="Docs + meetings integration", version_tag="v1.1.0-beta", created_by_id=manager.id),
@@ -477,4 +750,5 @@ async def seed_demo_data():
         print("  client@demo.com / password")
         print("  qa@demo.com / password")
         print("  ops@demo.com / password")
+        print(f"  Проект «{BEZUM_SEAMLESS_NAME}»: репо {BEZUM_SEAMLESS_REPO} (CI/CD, Связи, канбан)")
 
