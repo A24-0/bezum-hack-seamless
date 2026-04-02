@@ -59,3 +59,21 @@
     --rdp-accent-background-color: rgba(99, 102, 241, 0.2);
   }
 }
+
+/* Плавающий чат: гарантированно поверх контента и не «теряется» из-за stacking context */
+#bot-dock {
+  position: fixed !important;
+  right: max(1rem, env(safe-area-inset-right, 0px)) !important;
+  bottom: max(1rem, env(safe-area-inset-bottom, 0px)) !important;
+  left: auto !important;
+  top: auto !important;
+  z-index: 2147483646 !important;
+  pointer-events: none !important;
+}
+
+#voice-control {
+  position: fixed !important;
+  left: max(1rem, env(safe-area-inset-left, 0px)) !important;
+  bottom: max(1rem, env(safe-area-inset-bottom, 0px)) !important;
+  z-index: 2147483645 !important;
+}

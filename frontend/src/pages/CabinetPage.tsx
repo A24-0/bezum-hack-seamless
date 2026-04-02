@@ -114,16 +114,18 @@ export default function CabinetPage() {
     }
   }, [me])
 
-  const tourTargets = useMemo(() => ['cabinet-techs', 'cabinet-match', 'bot-dock'] as const, [])
+  const tourTargets = useMemo(() => ['cabinet-profile', 'cabinet-techs', 'cabinet-match', 'bot-dock'] as const, [])
 
   useEffect(() => {
     if (!tourOpen) return
     const id = tourTargets[tourStep] || tourTargets[0]
     const el = document.getElementById(id)
     if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
     const prevOutline = el.style.outline
     el.style.outline = '3px solid rgba(99, 102, 241, 0.9)'
     el.style.outlineOffset = '4px'
+    el.style.borderRadius = '8px'
     return () => {
       el.style.outline = prevOutline
       el.style.outlineOffset = '0px'
@@ -145,22 +147,36 @@ export default function CabinetPage() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Личный кабинет</h1>
           <div className="text-sm text-slate-500 mt-1">Профиль, стек и подбор программистов по технологиям</div>
         </div>
-        <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={tourEnabled}
-            onChange={(e) => {
-              const v = e.target.checked
-              setTourEnabled(v)
-              setOnboardingEnabled(v)
-            }}
-          />
-          Онбординг (подсказки)
-        </label>
+        <div className="flex flex-col items-end gap-1">
+          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={tourEnabled}
+              onChange={(e) => {
+                const v = e.target.checked
+                setTourEnabled(v)
+                setOnboardingEnabled(v)
+              }}
+            />
+            Показывать подсказки по кабинету
+          </label>
+          {tourEnabled && (
+            <button
+              type="button"
+              className="text-xs text-indigo-400 hover:text-indigo-300"
+              onClick={() => {
+                setTourStep(0)
+                setTourOpen(true)
+              }}
+            >
+              Пройти гид заново
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="card p-4 lg:col-span-1">
+        <div className="card p-4 lg:col-span-1" id="cabinet-profile">
           <div className="text-sm font-semibold text-slate-900 dark:text-white mb-3">Профиль</div>
           <div className="space-y-3">
             <div>
@@ -293,12 +309,17 @@ export default function CabinetPage() {
       {tourOpen && (
         <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" />
-          <div className="relative w-full sm:max-w-xl card p-4">
-            <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Гид по кабинету</div>
-            <div className="text-sm text-slate-300 whitespace-pre-wrap">
-              {tourStep === 0 && '1) Здесь задаёшь свой стек (языки/фреймворки).'}
-              {tourStep === 1 && '\n2) Здесь подбираешь разработчиков по стеку для задач.'}
-              {tourStep === 2 && '\n3) Справа снизу — чат-бот. Спроси “как перейти к части документа?” и т.д.'}
+          <div className="relative w-full sm:max-w-xl card p-4 border border-indigo-500/20 shadow-2xl">
+            <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Гид по личному кабинету</div>
+            <div className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">
+              {tourStep === 0 &&
+                'Шаг 1. Профиль: имя, email, ссылка на свой GitHub/GitLab. Нажми «Сохранить», чтобы команда видела актуальные данные.'}
+              {tourStep === 1 &&
+                'Шаг 2. Стек: перечисли языки и фреймворки (через запятую или из списка). Это нужно для подбора тебя на задачи в проектах.'}
+              {tourStep === 2 &&
+                'Шаг 3. Подбор: выбери теги, нажми «Найти» — увидишь коллег с пересечением по стеку. Открой карточку, чтобы перейти в публичный кабинет человека.'}
+              {tourStep === 3 &&
+                'Шаг 4. Помощник (иконка робота справа внизу на любой странице): спроси, как перейти в раздел, или включи «Автопереход» — откроется нужный экран после ответа.'}
             </div>
             <div className="flex items-center justify-between gap-3 mt-4">
               <button
@@ -310,20 +331,20 @@ export default function CabinetPage() {
                 Назад
               </button>
               <div className="flex items-center gap-2">
-                <div className="text-xs text-slate-500">{tourStep + 1}/3</div>
-                {tourStep < 2 ? (
+                <div className="text-xs text-slate-500">{tourStep + 1}/4</div>
+                {tourStep < 3 ? (
                   <button type="button" className="btn-primary" onClick={() => setTourStep((s) => s + 1)}>
                     Дальше
                   </button>
                 ) : (
                   <button type="button" className="btn-primary" onClick={finishTour}>
-                    Понятно
+                    Готово
                   </button>
                 )}
               </div>
             </div>
             <button type="button" className="btn-ghost mt-3 w-full text-left text-xs" onClick={finishTour}>
-              Пропустить
+              Пропустить гид
             </button>
           </div>
         </div>

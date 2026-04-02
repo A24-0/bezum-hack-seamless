@@ -3,10 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Download, FileText, Paperclip, Trash2, Upload } from 'lucide-react'
 import { aiApi, documentsApi, tasksApi, meetingsApi } from '../api'
 import { StatusBadge } from '../components/common/StatusBadge'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useUIStore } from '../stores/uiStore'
 import type { Document, DocumentAttachment, Task } from '../types'
 import { extractDocBlocks, extractDocPlainText, truncate } from '../lib/docPreview'
+import { VOICE_EDITOR_EVENT, type VoiceEditorDetail } from '../lib/voiceCommands'
 
 function downloadBlob(blob: Blob, filename: string) {
   const u = URL.createObjectURL(blob)
@@ -57,37 +58,21 @@ export default function DocumentEditorPage() {
   const blockRefs = useMemo(() => new Map<number, HTMLDivElement>(), [])
 
   const plainTextForSummary = useMemo(() => extractDocPlainText(doc?.content), [doc?.content])
-  const [essenceSummary, setEssenceSummary] = useState<string | null>(null)
-  const [essenceError, setEssenceError] = useState<string | null>(null)
+  const essenceTextTrimmed = (plainTextForSummary || '').trim()
+  const hasTextForEssence = essenceTextTrimmed.length > 0
 
-  const summarizeEssenceMutation = useMutation({
-    mutationFn: () => aiApi.summarizeDocument(plainTextForSummary).then((r) => r.data.summary),
-    onSuccess: (summary) => {
-      setEssenceSummary(summary)
-      setEssenceError(null)
-    },
-    onError: () => {
-      setEssenceError('Не удалось построить сводку по документу.')
-    },
+  /** При смене документа, версии или текста с сервера (в т.ч. после загрузки файла) — новая сводка и блоки из doc.content */
+  const {
+    data: essenceSummary,
+    isPending: essencePending,
+    isFetching: essenceFetching,
+    isError: essenceIsError,
+  } = useQuery({
+    queryKey: ['docEssence', projectId, docId, doc?.updated_at, essenceTextTrimmed.slice(0, 4000)],
+    queryFn: () => aiApi.summarizeDocument(essenceTextTrimmed).then((r) => r.data.summary),
+    enabled: !!projectId && !!docId && !!doc && hasTextForEssence,
+    staleTime: 0,
   })
-
-  useEffect(() => {
-    // Reset summary when doc changes.
-    setEssenceSummary(null)
-    setEssenceError(null)
-  }, [doc?.id, doc?.updated_at])
-
-  useEffect(() => {
-    if (!doc) return
-    const txt = (plainTextForSummary || '').trim()
-    if (!txt) {
-      setEssenceError('В документе пока нет текста для анализа.')
-      return
-    }
-    if (essenceSummary !== null || essenceError !== null) return
-    summarizeEssenceMutation.mutate()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc?.id, doc?.updated_at, plainTextForSummary])
 
   useEffect(() => {
     if (focusIndex === null || !Number.isFinite(focusIndex)) return
@@ -100,6 +85,7 @@ export default function DocumentEditorPage() {
     return extractDocPlainText(doc.content)
   }, [doc])
   const [text, setText] = useState('')
+  const bodyTextareaRef = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
     setText(initialText)
   }, [initialText])
@@ -139,6 +125,26 @@ export default function DocumentEditorPage() {
       addToast({ type: 'error', title: 'Не удалось сохранить документ' })
     },
   })
+
+  useEffect(() => {
+    const onVoice = (e: Event) => {
+      const ce = e as CustomEvent<VoiceEditorDetail>
+      const d = ce.detail
+      if (!d) return
+      if (d.action === 'save') saveVersion.mutate()
+      if (d.action === 'focus') bodyTextareaRef.current?.focus()
+      if (d.action === 'append' && d.text?.trim()) {
+        const add = d.text.trim()
+        setText((t) => {
+          if (!t.trim()) return add
+          return `${t.trimEnd()}\n\n${add}`
+        })
+        queueMicrotask(() => bodyTextareaRef.current?.focus())
+      }
+    }
+    window.addEventListener(VOICE_EDITOR_EVENT, onVoice)
+    return () => window.removeEventListener(VOICE_EDITOR_EVENT, onVoice)
+  }, [saveVersion])
 
   const approveDoc = useMutation({
     mutationFn: () => documentsApi.approve(projectId!, docId!).then((r) => r.data),
@@ -242,12 +248,19 @@ export default function DocumentEditorPage() {
           <div className="card p-4 text-slate-300 text-sm space-y-3">
             <div className="border border-slate-700 rounded p-3 bg-slate-800/20">
               <div className="text-xs font-semibold text-slate-200 mb-2">Суть документа</div>
-              {essenceSummary ? (
-                <pre className="text-sm text-slate-200 whitespace-pre-wrap font-sans mb-3">{essenceSummary}</pre>
-              ) : essenceError ? (
-                <div className="text-xs text-red-300 mb-3">{essenceError}</div>
-              ) : (
+              {!hasTextForEssence && (
+                <div className="text-xs text-slate-500 mb-3">
+                  В документе пока нет текста для анализа (загрузите файл с текстом или введите текст и сохраните версию).
+                </div>
+              )}
+              {hasTextForEssence && essenceIsError && (
+                <div className="text-xs text-red-300 mb-3">Не удалось построить сводку по документу.</div>
+              )}
+              {hasTextForEssence && !essenceIsError && !essenceSummary && (essencePending || essenceFetching) && (
                 <div className="text-xs text-slate-500 mb-3">Анализируем документ…</div>
+              )}
+              {hasTextForEssence && !essenceIsError && essenceSummary && (
+                <pre className="text-sm text-slate-200 whitespace-pre-wrap font-sans mb-3">{essenceSummary}</pre>
               )}
               {blocks.length === 0 ? (
                 <div className="text-xs text-slate-500">Части документа не распознаны.</div>
@@ -285,6 +298,7 @@ export default function DocumentEditorPage() {
               {blocks.length > 40 && <div className="text-[11px] text-slate-500 mt-2">Показаны первые 40 частей.</div>}
             </div>
             <textarea
+              ref={bodyTextareaRef}
               className="input resize-none text-sm"
               rows={14}
               value={text}

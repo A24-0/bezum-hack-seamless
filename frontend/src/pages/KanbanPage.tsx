@@ -1,7 +1,7 @@
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { tasksApi, projectsApi, epochsApi } from '../api'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useUIStore } from '../stores/uiStore'
 import { useAuthStore } from '../stores/authStore'
 import type { Project, Task, TaskStatus } from '../types'
@@ -15,6 +15,7 @@ type TaskScope = 'all' | 'mine' | 'unassigned'
 
 export default function KanbanPage() {
   const { projectId } = useParams<{ projectId: string }>()
+  const location = useLocation()
   const qc = useQueryClient()
   const { addToast } = useUIStore()
   const { user } = useAuthStore()
@@ -52,10 +53,10 @@ export default function KanbanPage() {
     if (scope === 'mine' && user?.id) p.assignee_id = String(user.id)
     if (epochFilter) p.epoch_id = epochFilter
     return p
-  }, [scope, user?.id])
+  }, [scope, user?.id, epochFilter])
 
   const { data: tasksRaw = [], isLoading, isError } = useQuery({
-    queryKey: ['tasks', projectId, scope, listParams],
+    queryKey: ['tasks', projectId, scope, epochFilter, listParams],
     queryFn: () => tasksApi.list(projectId!, listParams).then((r) => r.data as Task[]),
     enabled: !!projectId,
   })
@@ -67,6 +68,22 @@ export default function KanbanPage() {
     }
     return list
   }, [tasksRaw, scope])
+
+  /** Переход со страницы «Связи» по ссылке /kanban#task-… */
+  useEffect(() => {
+    const id = location.hash.replace(/^#/, '')
+    if (!id.startsWith('task-')) return
+    const t = window.setTimeout(() => {
+      const el = document.getElementById(id)
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('ring-2', 'ring-indigo-400', 'ring-offset-2', 'ring-offset-slate-100', 'dark:ring-offset-slate-900')
+      window.setTimeout(() => {
+        el.classList.remove('ring-2', 'ring-indigo-400', 'ring-offset-2', 'ring-offset-slate-100', 'dark:ring-offset-slate-900')
+      }, 2200)
+    }, 120)
+    return () => clearTimeout(t)
+  }, [location.hash, tasks])
 
   const myCount = useMemo(() => {
     if (!user?.id) return 0

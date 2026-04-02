@@ -30,11 +30,13 @@ export interface CabinetMatchResponse {
   candidates: CabinetUser[]
 }
 
+export type ProjectLifecycleStatus = 'draft' | 'active' | 'completed'
+
 export interface Project {
   id: string
   name: string
   description: string
-  status: 'active' | 'archived' | 'completed'
+  status: ProjectLifecycleStatus
   gitlab_repo_url?: string
   /** Numeric project id в GitLab (Settings → General) для API и webhook */
   gitlab_project_id?: number | null
@@ -46,11 +48,11 @@ export interface Project {
 }
 
 export interface ProjectMember {
-  id: string
   project_id: string
+  user_id: string
   user: User
   role: 'manager' | 'developer' | 'customer'
-  joined_at: string
+  joined_at?: string
 }
 
 export type EpochStatus = 'planning' | 'active' | 'completed' | 'cancelled'

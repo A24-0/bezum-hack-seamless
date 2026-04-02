@@ -1,16 +1,18 @@
 import { Outlet, Link, useNavigate } from 'react-router-dom'
-import { Bell, LogOut, Layers, Shield, UserRound } from 'lucide-react'
+import { Bell, LogOut, Layers, MessageCircle, Shield, UserRound } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
+import { useUIStore } from '../../stores/uiStore'
 import { UserAvatar } from '../common/UserAvatar'
 import { ThemeToggleButton } from '../common/ThemeToggleButton'
-import { VoiceControl } from '../common/VoiceControl'
 import ChatBotDock from '../common/ChatBotDock'
+import { VoiceControl } from '../common/VoiceControl'
 import { ROLE_LABELS } from '../../lib/utils'
 
 export default function AppLayout() {
   const { user, logout } = useAuthStore()
   const { unreadCount } = useNotificationStore()
+  const setChatDockOpen = useUIStore((s) => s.setChatDockOpen)
   const navigate = useNavigate()
 
   const handleLogout = () => {
@@ -28,6 +30,17 @@ export default function AppLayout() {
         </Link>
 
         <div className="flex-1" />
+
+        <button
+          type="button"
+          className="btn-ghost p-2 rounded-md flex items-center gap-1.5 text-sm font-medium text-indigo-600 dark:text-indigo-300 shrink-0"
+          title="Чат-помощник (кнопка также справа внизу)"
+          aria-label="Открыть чат-помощник"
+          onClick={() => setChatDockOpen(true)}
+        >
+          <MessageCircle className="w-5 h-5" strokeWidth={1.75} />
+          <span className="hidden sm:inline">Чат</span>
+        </button>
 
         <ThemeToggleButton />
 

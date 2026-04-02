@@ -224,7 +224,7 @@ export default function EpochPassPage() {
 
         <div className="lg:col-span-1 space-y-4">
           <div className="card p-4">
-            <div className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-900">
+            <div className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-900 dark:text-white">
               <FileText className="w-4 h-4 text-indigo-400" /> Документы спринта
             </div>
             {docs.length === 0 ? (
@@ -247,7 +247,7 @@ export default function EpochPassPage() {
           </div>
 
           <div className="card p-4">
-            <div className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-900">
+            <div className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-900 dark:text-white">
               <Users className="w-4 h-4 text-purple-400" /> Встречи спринта
             </div>
             {meetings.length === 0 ? (
@@ -271,7 +271,7 @@ export default function EpochPassPage() {
 
         <div className="hidden lg:block">
           <div className="card p-4">
-            <div className="text-sm font-semibold text-slate-900 mb-2">Подсказка</div>
+            <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Подсказка</div>
             <div className="text-xs text-slate-500 leading-relaxed">
               Используйте кнопки “Предыдущая/Следующая”, чтобы проходить спринт как “воронку”.
               Для задач, документов и встреч в этом экране — только данные текущей эпохи.

@@ -1,9 +1,9 @@
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { projectsApi } from '../api'
 import { UserAvatar } from '../components/common/UserAvatar'
 import type { ProjectMember } from '../types'
-import { Users } from 'lucide-react'
+import { ChevronRight, FileText, Users } from 'lucide-react'
 import { ROLE_LABELS } from '../lib/utils'
 
 export default function MembersPage() {
@@ -31,12 +31,22 @@ export default function MembersPage() {
       ) : (
         <ul className="space-y-2">
           {(members as ProjectMember[]).map((m) => (
-            <li key={m.id} className="card p-4 flex items-center gap-3">
-              <UserAvatar user={m.user} size="md" />
-              <div>
-                <div className="text-slate-900 dark:text-white font-medium">{m.user.name}</div>
-                <div className="text-xs text-slate-500">{ROLE_LABELS[m.role] ?? m.role}</div>
-              </div>
+            <li key={`${m.project_id}-${m.user_id}`}>
+              <Link
+                to={`/cabinet/users/${m.user.id}`}
+                className="card p-4 flex items-center gap-3 hover:border-indigo-500/40 transition-colors group"
+              >
+                <UserAvatar user={m.user} size="md" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-slate-900 dark:text-white font-medium">{m.user.name}</div>
+                  <div className="text-xs text-slate-500">{ROLE_LABELS[m.role] ?? m.role}</div>
+                  <div className="text-xs text-indigo-400/90 mt-1.5 flex items-center gap-1">
+                    <FileText className="w-3.5 h-3.5 shrink-0" />
+                    Описание в кабинете (стек, Git)
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-indigo-400 shrink-0 transition-colors" aria-hidden />
+              </Link>
             </li>
           ))}
         </ul>

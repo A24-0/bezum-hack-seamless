@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Layers, Users, Clock, GitBranch } from 'lucide-react'
 import { projectsApi } from '../api'
+import type { ProjectLifecycleStatus } from '../types'
 import { useAuthStore } from '../stores/authStore'
 import { ProgressRing } from '../components/common/ProgressRing'
 import { StatusBadge } from '../components/common/StatusBadge'
@@ -11,7 +12,12 @@ import { cn } from '../lib/utils'
 function NewProjectModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ name: '', description: '', gitlab_repo_url: '', status: 'active' })
+  const [form, setForm] = useState<{
+    name: string
+    description: string
+    gitlab_repo_url: string
+    status: ProjectLifecycleStatus
+  }>({ name: '', description: '', gitlab_repo_url: '', status: 'draft' })
   const mutation = useMutation({
     mutationFn: () => projectsApi.create(form as any).then(r => r.data),
     onSuccess: (project) => {
@@ -37,6 +43,18 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
           <div>
             <label className="label">Ссылка на GitHub</label>
             <input className="input" placeholder="https://github.com/org/repo (или owner/repo)" value={form.gitlab_repo_url} onChange={e => setForm(f => ({ ...f, gitlab_repo_url: e.target.value }))} />
+          </div>
+          <div>
+            <label className="label">Статус проекта</label>
+            <select
+              className="input"
+              value={form.status}
+              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as ProjectLifecycleStatus }))}
+            >
+              <option value="draft">Черновик</option>
+              <option value="active">Активный</option>
+              <option value="completed">Завершён</option>
+            </select>
           </div>
           <div className="flex gap-3 justify-end mt-6">
             <button type="button" className="btn-secondary" onClick={onClose}>Отмена</button>

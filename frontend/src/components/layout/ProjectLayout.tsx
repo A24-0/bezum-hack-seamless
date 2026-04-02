@@ -43,10 +43,18 @@ export default function ProjectLayout() {
             <span className="font-semibold text-slate-900 dark:text-slate-100 text-sm truncate">{project?.name || '...'}</span>
           </div>
           {project && (
-            <div className={cn(
-              "mt-1 text-xs font-medium",
-              project.status === 'active' ? 'text-green-400' : project.status === 'completed' ? 'text-blue-400' : 'text-slate-400'
-            )}>
+            <div
+              className={cn(
+                'mt-1 text-xs font-medium',
+                project.status === 'active'
+                  ? 'text-green-400'
+                  : project.status === 'completed'
+                    ? 'text-blue-400'
+                    : project.status === 'draft'
+                      ? 'text-amber-400/90'
+                      : 'text-slate-400'
+              )}
+            >
               {STATUS_LABELS[project.status] ?? project.status}
             </div>
           )}

@@ -11,6 +11,9 @@ interface Toast {
 interface UIStore {
   darkMode: boolean
   toasts: Toast[]
+  /** Панель чат-помощника (FAB + шапка открывают одно и то же) */
+  chatDockOpen: boolean
+  setChatDockOpen: (open: boolean) => void
   toggleDarkMode: () => void
   addToast: (toast: Omit<Toast, 'id'>) => void
   removeToast: (id: string) => void
@@ -19,6 +22,8 @@ interface UIStore {
 export const useUIStore = create<UIStore>((set) => ({
   darkMode: readStoredDark(),
   toasts: [],
+  chatDockOpen: false,
+  setChatDockOpen: (open) => set({ chatDockOpen: open }),
   toggleDarkMode: () => set((state) => ({ darkMode: !state.darkMode })),
   addToast: (toast) => {
     const id = Math.random().toString(36).slice(2)

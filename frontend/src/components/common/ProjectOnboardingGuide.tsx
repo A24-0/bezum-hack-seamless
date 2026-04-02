@@ -42,6 +42,7 @@ export default function ProjectOnboardingGuide() {
       { id: 'project-nav-meetings', title: 'Встречи', route: 'meetings' },
       { id: 'project-nav-cicd', title: 'CI/CD', route: 'cicd' },
       { id: 'project-nav-epochs', title: 'Эпохи', route: 'epochs' },
+      { id: 'bot-dock', title: 'Помощник', route: 'overview' },
     ],
     []
   )
@@ -52,9 +53,11 @@ export default function ProjectOnboardingGuide() {
     if (!t) return
     const el = document.getElementById(t.id)
     if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
     const prev = el.style.outline
     el.style.outline = '3px solid rgba(99, 102, 241, 0.95)'
     el.style.outlineOffset = '4px'
+    el.style.borderRadius = '8px'
     return () => {
       el.style.outline = prev
       el.style.outlineOffset = '0px'
@@ -100,6 +103,8 @@ export default function ProjectOnboardingGuide() {
           {step === 3 && 'Встречи поддерживают транскрипт и суммаризацию. Это удобно после созвона.'}
           {step === 4 && 'CI/CD синхронизирует PR и обрабатывает webhooks.'}
           {step === 5 && 'Эпохи можно “проходить” — для навигации по задачам/документам внутри конкретного этапа.'}
+          {step === 6 &&
+            'Справа внизу — иконка помощника: спроси, как что-то найти, или нажми быстрый переход. Включи «Автопереход», чтобы сразу открывать найденный раздел.'}
         </div>
 
         <div className="flex items-center justify-between gap-3">

@@ -14,3 +14,10 @@ export function projectMemberRole(user: User | null, members: ProjectMember[] | 
   const m = members?.find((x) => String(x.user.id) === String(user.id))
   return m?.role ?? null
 }
+
+/** Смена настроек проекта (статус и т.п.): менеджер проекта или глобально admin/manager. */
+export function canEditProjectSettings(user: User | null, members: ProjectMember[] | undefined): boolean {
+  if (!user) return false
+  if (user.role === 'admin' || user.role === 'manager') return true
+  return projectMemberRole(user, members) === 'manager'
+}

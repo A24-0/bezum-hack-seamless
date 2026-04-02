@@ -11,12 +11,12 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { FileText, GitPullRequest, GripVertical, Link2, Target } from 'lucide-react'
+import { ArrowUpRight, FileText, GitPullRequest, GripVertical, Link2, Target } from 'lucide-react'
 import { cicdApi, documentsApi, epochsApi, meetingsApi, projectsApi, tasksApi } from '../api'
 import { StatusBadge } from '../components/common/StatusBadge'
 import { useUIStore } from '../stores/uiStore'
 import type { Document, Epoch, Meeting, PullRequest, Task } from '../types'
-import { STATUS_COLORS, STATUS_LABELS } from '../lib/utils'
+import { STATUS_COLORS, STATUS_LABELS, cn } from '../lib/utils'
 
 /** 0 = «рискованная» пара статусов (красный), 1 = согласованный поток (зелёный) */
 function docTaskAlignmentScore(docStatus: string, taskStatus: string): number {
@@ -56,6 +56,20 @@ function mergeOrder(prev: string[], nextIds: string[]): string[] {
   const kept = prev.filter((id) => set.has(id))
   const tail = nextIds.filter((id) => !kept.includes(id))
   return [...kept, ...tail]
+}
+
+function StatPill({ label, value, accent }: { label: string; value: number; accent: string }) {
+  return (
+    <div
+      className={cn(
+        'rounded-xl border border-slate-200/90 dark:border-slate-700/90 p-4 shadow-sm bg-gradient-to-br',
+        accent
+      )}
+    >
+      <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums mt-1">{value}</div>
+    </div>
+  )
 }
 
 export default function ProjectRelationsPage() {
@@ -234,33 +248,46 @@ export default function ProjectRelationsPage() {
   if (!projectId) return null
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <Link2 className="w-6 h-6 text-indigo-400" />
-          Карта интеграций
-        </h1>
-        <p className="text-slate-400 text-sm mt-1">Сквозной вид: спринты, задачи, документы, встречи и PR</p>
+    <div className="min-h-full px-4 sm:px-6">
+      <div className="max-w-6xl mx-auto">
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-indigo-500/[0.07] via-slate-50 to-violet-500/[0.06] dark:from-indigo-950/40 dark:via-slate-900 dark:to-violet-950/30 p-6 sm:p-8 mb-8">
+        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
+        <div className="relative">
+          <div className="flex items-start gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-500/25">
+              <Link2 className="w-6 h-6" strokeWidth={1.75} />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Связи</h1>
+              <p className="text-slate-600 dark:text-slate-400 text-sm mt-1 max-w-2xl">
+                Документы и задачи в одной матрице, тепловая карта статусов и граф. По задаче можно перейти на канбан — карточка подсветится.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div className="card p-3"><div className="text-xs text-slate-400">Спринты</div><div className="text-xl text-slate-900 dark:text-white font-semibold">{epochs.length}</div></div>
-        <div className="card p-3"><div className="text-xs text-slate-400">Задачи</div><div className="text-xl text-slate-900 dark:text-white font-semibold">{tasks.length}</div></div>
-        <div className="card p-3"><div className="text-xs text-slate-400">Документы</div><div className="text-xl text-slate-900 dark:text-white font-semibold">{docs.length}</div></div>
-        <div className="card p-3"><div className="text-xs text-slate-400">Встречи</div><div className="text-xl text-slate-900 dark:text-white font-semibold">{meetings.length}</div></div>
-        <div className="card p-3">
-          <div className="text-xs text-slate-400">Pull requests (GitHub)</div>
-          <div className="text-xl text-slate-900 dark:text-white font-semibold">{hasGithubRepo ? prs.length : '—'}</div>
-          {!hasGithubRepo && <div className="text-[10px] text-slate-500 mt-1">Укажите репозиторий в CI/CD</div>}
+      <div className="max-w-6xl mx-auto pb-10 space-y-8">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <StatPill label="Спринты" value={epochs.length} accent="from-amber-500/20 to-orange-500/10" />
+        <StatPill label="Задачи" value={tasks.length} accent="from-emerald-500/20 to-teal-500/10" />
+        <StatPill label="Документы" value={docs.length} accent="from-sky-500/20 to-blue-500/10" />
+        <StatPill label="Встречи" value={meetings.length} accent="from-fuchsia-500/20 to-pink-500/10" />
+        <div className="col-span-2 sm:col-span-3 lg:col-span-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm p-4 shadow-sm">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Pull requests</div>
+          <div className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums mt-1">{hasGithubRepo ? prs.length : '—'}</div>
+          {!hasGithubRepo && <div className="text-[10px] text-slate-500 mt-1">Репозиторий в CI/CD</div>}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="card p-4">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
-            <Target className="w-4 h-4 text-indigo-400" />
-            Табличная карта связей: Документы ↔ Задачи
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-700/90 bg-white/90 dark:bg-slate-900/60 shadow-sm p-5 sm:p-6">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+            <Target className="w-5 h-5 text-indigo-500 shrink-0" />
+            Матрица «документ ↔ задача»
           </h2>
+          <p className="text-xs text-slate-500 mb-4">Клик по ячейке — связать или снять. Заголовки задач ведут на канбан.</p>
 
           <div className="space-y-3">
             <DndContext onDragEnd={handleDragEnd}>
@@ -295,27 +322,38 @@ export default function ProjectRelationsPage() {
               </div>
             </DndContext>
 
-            <div className="overflow-auto rounded-lg border border-slate-700">
+            <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-700 shadow-inner">
               <table className="min-w-[900px] w-full text-xs">
-                <thead className="bg-slate-800/30 text-slate-300">
+                <thead className="bg-slate-100/95 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300">
                   <tr>
-                    <th className="sticky left-0 bg-slate-900/70 z-10 p-3 text-left w-[320px]">Документы</th>
+                    <th className="sticky left-0 bg-slate-100/95 dark:bg-slate-900/90 z-10 p-3 text-left w-[320px] border-r border-slate-200/80 dark:border-slate-700/80">
+                      Документы
+                    </th>
                     {orderedTasks.map((t) => (
-                      <th key={String(t.id)} className="p-2 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-2">
-                          <StatusBadge status={t.status} size="sm" />
-                        </div>
-                        <div className="text-[11px] text-slate-200 truncate max-w-[160px] mx-auto">
-                          #{t.id} {t.title}
-                        </div>
+                      <th key={String(t.id)} className="p-2 text-center whitespace-nowrap align-top min-w-[128px]">
+                        <Link
+                          to={`/projects/${projectId}/kanban#task-${t.id}`}
+                          className="group block rounded-lg px-1.5 py-2 -mx-0.5 transition-colors hover:bg-indigo-500/15 border border-transparent hover:border-indigo-500/25"
+                          title="Открыть задачу на канбане"
+                        >
+                          <div className="flex items-center justify-center gap-2">
+                            <StatusBadge status={t.status} size="sm" />
+                          </div>
+                          <div className="text-[11px] text-slate-200 truncate max-w-[168px] mx-auto mt-1 flex items-center justify-center gap-0.5">
+                            <span className="truncate">
+                              #{t.id} {t.title}
+                            </span>
+                            <ArrowUpRight className="w-3 h-3 shrink-0 text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </Link>
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="bg-slate-900/10 divide-y divide-slate-700/60">
+                <tbody className="bg-white/50 dark:bg-slate-900/20 divide-y divide-slate-200 dark:divide-slate-700/60">
                   {orderedDocs.map((d) => (
-                    <tr key={String(d.id)}>
-                      <td className="sticky left-0 bg-slate-900/60 z-10 p-3">
+                    <tr key={String(d.id)} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30">
+                      <td className="sticky left-0 bg-white/95 dark:bg-slate-900/90 z-10 p-3 border-r border-slate-200/80 dark:border-slate-700/80">
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <Link
@@ -377,15 +415,17 @@ export default function ProjectRelationsPage() {
           </div>
         </div>
 
-        <div className="card p-4">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
-            <FileText className="w-4 h-4 text-indigo-400" />
-            Тепловая карта связей (статусы)
+        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-700/90 bg-white/90 dark:bg-slate-900/60 shadow-sm p-5 sm:p-6">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-indigo-500 shrink-0" />
+            Тепловая карта и граф
           </h2>
+          <p className="text-xs text-slate-500 mb-4">Узлы графа можно тянуть; у задачи и документа — ссылка на канбан или документ.</p>
 
           <div className="space-y-4">
-            <div className="overflow-hidden rounded-lg border border-slate-700 bg-slate-950/10">
+            <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-950/[0.15] dark:bg-slate-950/30">
               <RelationsGraphCanvas
+                projectId={projectId}
                 orderedDocs={orderedDocs}
                 orderedTasks={orderedTasks}
                 linkedTaskIdsByDoc={linkedTaskIdsByDoc}
@@ -401,9 +441,9 @@ export default function ProjectRelationsPage() {
               (перетащите карточки; дальше = холоднее). Толщина линии — «жар» пары в матрице статусов.
             </p>
 
-            <div className="overflow-auto rounded-lg border border-slate-700">
+            <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-700">
               <table className="min-w-[700px] w-full text-xs">
-                <thead className="bg-slate-800/30 text-slate-300">
+                <thead className="bg-slate-100/90 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300">
                   <tr>
                     <th className="p-3 text-left">Статус документов →</th>
                     {taskStatuses.map((ts) => (
@@ -477,7 +517,7 @@ export default function ProjectRelationsPage() {
             </h2>
             <ul className="space-y-2">
               {meetings.slice(0, 6).map((m) => (
-                <li key={m.id} className="border border-slate-700 rounded p-2">
+                <li key={m.id} className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 bg-slate-50/50 dark:bg-slate-800/40">
                   <Link
                     to={`/projects/${projectId}/meetings/${m.id}`}
                     className="text-sm text-slate-900 dark:text-white hover:text-indigo-300"
@@ -506,7 +546,7 @@ export default function ProjectRelationsPage() {
             ) : (
               <ul className="space-y-2">
                 {prs.slice(0, 8).map((pr) => (
-                  <li key={pr.id} className="border border-slate-700 rounded p-2">
+                  <li key={pr.id} className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 bg-slate-50/50 dark:bg-slate-800/40">
                     <a
                       href={pr.url}
                       target="_blank"
@@ -532,6 +572,7 @@ export default function ProjectRelationsPage() {
         </div>
       </div>
     </div>
+    </div>
   )
 }
 
@@ -551,6 +592,7 @@ type GraphEdge = {
 }
 
 function RelationsGraphCanvas({
+  projectId,
   orderedDocs,
   orderedTasks,
   linkedTaskIdsByDoc,
@@ -560,6 +602,7 @@ function RelationsGraphCanvas({
   docStatuses,
   taskStatuses,
 }: {
+  projectId: string
   orderedDocs: Document[]
   orderedTasks: Task[]
   linkedTaskIdsByDoc: Record<string, Set<string>>
@@ -875,7 +918,7 @@ function RelationsGraphCanvas({
                 key={n.key}
                 data-node="1"
                 style={{ position: 'absolute', left: p.x, top: p.y, width: NODE_W, height: NODE_H }}
-                className={`px-3 py-2 rounded-xl border shadow-sm select-none cursor-grab ${color}`}
+                className={`relative px-3 py-2 rounded-xl border shadow-sm select-none cursor-grab ${color}`}
                 onPointerDown={(e) => {
                   e.stopPropagation()
                   const p0 = getGraphPoint(e.clientX, e.clientY)
@@ -892,7 +935,26 @@ function RelationsGraphCanvas({
                 }}
                 title={`${n.kind === 'doc' ? 'Документ' : 'Задача'}: ${n.title}`}
               >
-                <div className="text-xs font-semibold">
+                {n.kind === 'doc' ? (
+                  <Link
+                    to={`/projects/${projectId}/documents/${n.id}`}
+                    className="absolute top-1.5 right-1.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-white/90 text-indigo-600 shadow-sm hover:bg-indigo-50 dark:bg-slate-900/90 dark:text-indigo-300 dark:hover:bg-indigo-950/80"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    title="Открыть документ"
+                  >
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </Link>
+                ) : (
+                  <Link
+                    to={`/projects/${projectId}/kanban#task-${n.id}`}
+                    className="absolute top-1.5 right-1.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-white/90 text-indigo-600 shadow-sm hover:bg-indigo-50 dark:bg-slate-900/90 dark:text-indigo-300 dark:hover:bg-indigo-950/80"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    title="Открыть на канбане"
+                  >
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </Link>
+                )}
+                <div className="text-xs font-semibold pr-8">
                   {n.kind === 'doc' ? 'Док:' : 'Задача:'} {title}
                 </div>
                 <div className="mt-1">
@@ -927,10 +989,14 @@ function TaskChip({ task, projectId }: { task: Task; projectId: string }) {
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <Link
-            to={`/projects/${projectId}/kanban`}
-            className="text-sm text-slate-200 hover:text-indigo-300 truncate block"
+            to={`/projects/${projectId}/kanban#task-${task.id}`}
+            className="group text-sm text-slate-200 hover:text-indigo-300 truncate block"
+            title="Открыть на канбане"
           >
-            #{task.id} {task.title}
+            <span className="truncate">
+              #{task.id} {task.title}
+            </span>{' '}
+            <ArrowUpRight className="inline w-3 h-3 -mt-0.5 text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity" />
           </Link>
           <div className="mt-1">
             <StatusBadge status={task.status} size="sm" />

@@ -178,9 +178,10 @@ function DraggableTask({
 
   return (
     <div
+      id={`task-${task.id}`}
       ref={setNodeRef}
       style={style}
-      className={cn(isDragging && 'opacity-40')}
+      className={cn('scroll-mt-24 rounded-xl', isDragging && 'opacity-40')}
     >
       <TaskCardBody
         task={task}
@@ -263,14 +264,15 @@ function StaticColumn({ status, tasksInCol }: { status: TaskStatus; tasksInCol: 
       </div>
       <div className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 p-2 min-h-[120px] space-y-2 bg-slate-50/80 dark:bg-slate-900/40">
         {tasksInCol.map((t) => (
-          <TaskCardBody
-            key={t.id}
-            task={t}
-            canEdit={false}
-            showAssignSelf={false}
-            onAssignSelf={() => {}}
-            assigning={false}
-          />
+          <div key={t.id} id={`task-${t.id}`} className="scroll-mt-24 rounded-xl">
+            <TaskCardBody
+              task={t}
+              canEdit={false}
+              showAssignSelf={false}
+              onAssignSelf={() => {}}
+              assigning={false}
+            />
+          </div>
         ))}
       </div>
     </div>

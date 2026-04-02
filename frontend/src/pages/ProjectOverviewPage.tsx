@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { CheckCircle, Clock, FileText, Video, GitPullRequest, TrendingUp } from 'lucide-react'
 import { projectsApi, epochsApi, tasksApi, documentsApi, meetingsApi } from '../api'
@@ -7,6 +7,11 @@ import { ProgressRing } from '../components/common/ProgressRing'
 import { StatusBadge } from '../components/common/StatusBadge'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
+import { useAuthStore } from '../stores/authStore'
+import { useUIStore } from '../stores/uiStore'
+import { canEditProjectSettings } from '../lib/projectPermissions'
+import type { Project } from '../types'
+import { cn } from '../lib/utils'
 
 function StatCard({ icon: Icon, label, value, color = 'text-indigo-400' }: any) {
   return (
@@ -24,8 +29,27 @@ function StatCard({ icon: Icon, label, value, color = 'text-indigo-400' }: any) 
 
 export default function ProjectOverviewPage() {
   const { projectId } = useParams<{ projectId: string }>()
+  const qc = useQueryClient()
+  const { user } = useAuthStore()
+  const { addToast } = useUIStore()
 
   const { data: project } = useQuery({ queryKey: ['project', projectId], queryFn: () => projectsApi.get(projectId!).then(r => r.data) })
+  const { data: members = [] } = useQuery({
+    queryKey: ['projectMembers', projectId],
+    queryFn: () => projectsApi.members(projectId!).then((r) => r.data),
+    enabled: !!projectId,
+  })
+
+  const canEditStatus = canEditProjectSettings(user, members)
+
+  const updateStatusMutation = useMutation({
+    mutationFn: (status: Project['status']) => projectsApi.update(projectId!, { status }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project', projectId] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+    },
+    onError: () => addToast({ type: 'error', title: 'Не удалось сохранить статус' }),
+  })
   const { data: epochs = [] } = useQuery({ queryKey: ['epochs', projectId], queryFn: () => epochsApi.list(projectId!).then(r => r.data) })
   const { data: tasks = [] } = useQuery({ queryKey: ['tasks', projectId], queryFn: () => tasksApi.list(projectId!).then(r => r.data) })
   const { data: docs = [] } = useQuery({ queryKey: ['docs', projectId], queryFn: () => documentsApi.list(projectId!).then(r => r.data) })
@@ -58,8 +82,27 @@ export default function ProjectOverviewPage() {
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{project?.name}</h1>
           <p className="text-slate-400 mt-1">{project?.description}</p>
-          <div className="flex items-center gap-3 mt-3">
-            <StatusBadge status={project?.status ?? 'active'} />
+          <div className="flex items-center gap-3 mt-3 flex-wrap">
+            {canEditStatus ? (
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-slate-500">Статус:</span>
+                <select
+                  className={cn(
+                    'rounded-lg border px-2.5 py-1 text-xs font-medium bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100',
+                    'focus:outline-none focus:ring-2 focus:ring-indigo-500/50'
+                  )}
+                  value={project?.status ?? 'draft'}
+                  disabled={updateStatusMutation.isPending}
+                  onChange={(e) => updateStatusMutation.mutate(e.target.value as Project['status'])}
+                >
+                  <option value="draft">Черновик</option>
+                  <option value="active">Активный</option>
+                  <option value="completed">Завершён</option>
+                </select>
+              </label>
+            ) : (
+              <StatusBadge status={project?.status ?? 'draft'} />
+            )}
             {project?.gitlab_repo_url && (
               <a href={project.gitlab_repo_url} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
                 <GitPullRequest className="w-3 h-3" /> GitHub
