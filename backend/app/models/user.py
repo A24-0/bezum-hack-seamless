@@ -1,13 +1,14 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
 
 class UserRole(str, enum.Enum):
+    admin = "admin"
     manager = "manager"
     developer = "developer"
     customer = "customer"
@@ -29,6 +30,9 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False, default=UserRole.developer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Ссылка на репозиторий автора (GitHub/GitLab/Bitbucket и т.п.)
+    git_repo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     # Relationships
     project_memberships: Mapped[list["ProjectMember"]] = relationship(
@@ -67,6 +71,24 @@ class User(Base):
     releases_created: Mapped[list["Release"]] = relationship(
         "Release", foreign_keys="Release.created_by_id", back_populates="created_by"
     )
+
+    # "Стек" (языки/фреймворки), который пользователь хочет указывать в кабинете.
+    techs: Mapped[list["UserTech"]] = relationship(
+        "UserTech", back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class UserTech(Base):
+    __tablename__ = "user_techs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    tech: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("user_id", "tech", name="uq_user_tech"),)
+
+    user: Mapped["User"] = relationship("User", back_populates="techs")
 
 
 class ProjectMember(Base):

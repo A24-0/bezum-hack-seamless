@@ -35,8 +35,8 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
             <textarea className="input resize-none" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
           <div>
-            <label className="label">Ссылка на GitLab</label>
-            <input className="input" placeholder="https://gitlab.com/org/repo" value={form.gitlab_repo_url} onChange={e => setForm(f => ({ ...f, gitlab_repo_url: e.target.value }))} />
+            <label className="label">Ссылка на GitHub</label>
+            <input className="input" placeholder="https://github.com/org/repo (или owner/repo)" value={form.gitlab_repo_url} onChange={e => setForm(f => ({ ...f, gitlab_repo_url: e.target.value }))} />
           </div>
           <div className="flex gap-3 justify-end mt-6">
             <button type="button" className="btn-secondary" onClick={onClose}>Отмена</button>

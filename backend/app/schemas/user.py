@@ -21,6 +21,13 @@ class UserCreate(UserBase):
             raise ValueError("Password must be at least 6 characters")
         return v
 
+    @field_validator("role")
+    @classmethod
+    def role_not_admin_on_register(cls, v: UserRole) -> UserRole:
+        if v == UserRole.admin:
+            raise ValueError("Registration with admin role is not allowed")
+        return v
+
 
 class UserUpdate(BaseModel):
     name: str | None = None

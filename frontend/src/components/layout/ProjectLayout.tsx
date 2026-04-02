@@ -3,6 +3,9 @@ import { LayoutDashboard, Clock, Trello, FileText, Video, GitPullRequest, Users,
 import { useQuery } from '@tanstack/react-query'
 import { projectsApi } from '../../api'
 import { cn, STATUS_LABELS } from '../../lib/utils'
+import { useAuthStore } from '../../stores/authStore'
+import { projectMemberRole } from '../../lib/projectPermissions'
+import ProjectOnboardingGuide from '../common/ProjectOnboardingGuide'
 
 const navItems = [
   { to: 'overview', icon: LayoutDashboard, label: 'Обзор' },
@@ -17,11 +20,18 @@ const navItems = [
 
 export default function ProjectLayout() {
   const { projectId } = useParams<{ projectId: string }>()
+  const { user } = useAuthStore()
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => projectsApi.get(projectId!).then(r => r.data),
     enabled: !!projectId,
   })
+  const { data: members = [] } = useQuery({
+    queryKey: ['projectMembers', projectId],
+    queryFn: () => projectsApi.members(projectId!).then((r) => r.data),
+    enabled: !!projectId,
+  })
+  const devInProject = projectMemberRole(user, members) === 'developer'
 
   return (
     <div className="flex min-h-[calc(100vh-56px)]">
@@ -47,9 +57,10 @@ export default function ProjectLayout() {
             <NavLink
               key={to}
               to={to}
+              id={`project-nav-${to}`}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors',
+                  'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors w-full',
                   isActive
                     ? 'bg-indigo-600 text-white'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-700'
@@ -57,7 +68,12 @@ export default function ProjectLayout() {
               }
             >
               <Icon className="w-4 h-4 shrink-0" />
-              {label}
+              <span className="flex-1 truncate">{label}</span>
+              {to === 'kanban' && devInProject && (
+                <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-500/25 text-emerald-600 dark:text-emerald-300 shrink-0">
+                  Dev
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -67,6 +83,8 @@ export default function ProjectLayout() {
       <main className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-900">
         <Outlet />
       </main>
+
+      <ProjectOnboardingGuide />
     </div>
   )
 }

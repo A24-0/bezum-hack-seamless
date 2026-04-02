@@ -16,7 +16,7 @@ from app.utils.permissions import require_project_access, require_manager
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
-def _project_dict(project: Project, member_count: int = 0, epoch_count: int = 0) -> dict:
+def _project_dict(project: Project, member_count: int = 0, epoch_count: int = 0, progress: int = 0) -> dict:
     return {
         "id": project.id,
         "name": project.name,
@@ -24,8 +24,10 @@ def _project_dict(project: Project, member_count: int = 0, epoch_count: int = 0)
         "status": project.status,
         "created_at": project.created_at,
         "gitlab_repo_url": project.gitlab_repo_url,
+        "gitlab_project_id": project.gitlab_project_id,
         "member_count": member_count,
         "epoch_count": epoch_count,
+        "progress": progress,
     }
 
 
@@ -34,7 +36,7 @@ async def list_projects(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role == UserRole.manager:
+    if current_user.role in (UserRole.manager, UserRole.admin):
         result = await db.execute(select(Project))
         projects = result.scalars().all()
     else:
@@ -49,7 +51,14 @@ async def list_projects(
     for p in projects:
         mc = await db.execute(select(func.count()).select_from(ProjectMember).where(ProjectMember.project_id == p.id))
         ec = await db.execute(select(func.count()).select_from(Epoch).where(Epoch.project_id == p.id))
-        out.append(_project_dict(p, mc.scalar(), ec.scalar()))
+        total_tasks = await db.execute(select(func.count()).select_from(Task).where(Task.project_id == p.id))
+        done_tasks = await db.execute(
+            select(func.count()).select_from(Task).where(Task.project_id == p.id, Task.status == TaskStatus.done)
+        )
+        total = total_tasks.scalar() or 0
+        done = done_tasks.scalar() or 0
+        prog = int(done / total * 100) if total > 0 else 0
+        out.append(_project_dict(p, mc.scalar(), ec.scalar(), prog))
     return out
 
 
@@ -63,6 +72,7 @@ async def create_project(
         name=data.name,
         description=data.description,
         gitlab_repo_url=data.gitlab_repo_url,
+        gitlab_project_id=data.gitlab_project_id,
         status=data.status,
     )
     db.add(project)
@@ -72,7 +82,7 @@ async def create_project(
     db.add(member)
     await db.flush()
     await db.refresh(project)
-    return _project_dict(project, 1, 0)
+    return _project_dict(project, 1, 0, 0)
 
 
 @router.get("/{project_id}")
@@ -96,9 +106,7 @@ async def get_project(
     done = done_tasks.scalar() or 0
     progress = int(done / total * 100) if total > 0 else 0
 
-    d = _project_dict(project, mc.scalar(), ec.scalar())
-    d["progress"] = progress
-    return d
+    return _project_dict(project, mc.scalar(), ec.scalar(), progress)
 
 
 @router.put("/{project_id}")

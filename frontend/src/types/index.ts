@@ -2,8 +2,32 @@ export interface User {
   id: string
   email: string
   name: string
-  role: 'manager' | 'developer' | 'customer'
+  role: 'admin' | 'manager' | 'developer' | 'customer'
   avatar_url?: string
+  git_repo_url?: string | null
+}
+
+export interface CabinetMe {
+  id: number
+  email: string
+  name: string
+  role: 'admin' | 'manager' | 'developer' | 'customer'
+  created_at: string
+  is_active: boolean
+  git_repo_url: string | null
+  techs: string[]
+}
+
+export interface CabinetUser {
+  id: number
+  name: string
+  role: 'admin' | 'manager' | 'developer' | 'customer'
+  git_repo_url: string | null
+  techs: string[]
+}
+
+export interface CabinetMatchResponse {
+  candidates: CabinetUser[]
 }
 
 export interface Project {
@@ -12,6 +36,8 @@ export interface Project {
   description: string
   status: 'active' | 'archived' | 'completed'
   gitlab_repo_url?: string
+  /** Numeric project id в GitLab (Settings → General) для API и webhook */
+  gitlab_project_id?: number | null
   created_at: string
   updated_at: string
   member_count?: number
@@ -52,7 +78,8 @@ export type TaskStatus =
 
 export interface TaskLabel {
   id: string
-  name: string
+  name?: string
+  label?: string
   color: string
 }
 
@@ -63,6 +90,8 @@ export interface Task {
   title: string
   description?: string
   status: TaskStatus
+  assignee_id?: string | number | null
+  order_index?: number
   assignee?: User
   reporter: User
   due_date?: string
@@ -70,6 +99,8 @@ export interface Task {
   watcher_count?: number
   watchers?: User[]
   linked_pr_count?: number
+  /** До 3 PR, привязанных к задаче (после синка GitHub) */
+  linked_prs?: { title: string; url: string; status: string }[]
   linked_meeting_count?: number
   created_at: string
   updated_at: string
@@ -77,6 +108,14 @@ export interface Task {
 
 export type DocumentVisibility = 'public' | 'managers_devs' | 'managers_only'
 export type DocumentStatus = 'draft' | 'review' | 'approved' | 'archived'
+
+export interface DocumentAttachment {
+  id: string
+  original_filename: string
+  mime_type: string
+  size_bytes: number
+  created_at: string
+}
 
 export interface Document {
   id: string
@@ -90,6 +129,7 @@ export interface Document {
   created_by: User
   updated_at: string
   created_at: string
+  attachments?: DocumentAttachment[]
 }
 
 export interface DocumentVersion {
@@ -136,6 +176,8 @@ export interface Meeting {
   summary?: string
   transcript?: string
   jitsi_room_id: string
+  /** Полный URL комнаты Jitsi (с бэкенда, домен из JITSI_DOMAIN). */
+  jitsi_room_url?: string
   participants: MeetingParticipant[]
   linked_documents?: Document[]
   time_slots?: TimeSlot[]
@@ -173,8 +215,9 @@ export interface Release {
   project_id: string
   epoch_id?: string
   epoch?: Epoch
+  name?: string
   version_tag: string
-  description: string
+  description?: string
   gitlab_release_url?: string
   created_at: string
   created_by: User

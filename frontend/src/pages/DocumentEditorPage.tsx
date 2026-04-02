@@ -1,14 +1,26 @@
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
-import { documentsApi, tasksApi, meetingsApi } from '../api'
+import { ArrowLeft, Download, FileText, Paperclip, Trash2, Upload } from 'lucide-react'
+import { aiApi, documentsApi, tasksApi, meetingsApi } from '../api'
 import { StatusBadge } from '../components/common/StatusBadge'
 import { useEffect, useMemo, useState } from 'react'
 import { useUIStore } from '../stores/uiStore'
-import type { Document, Task } from '../types'
+import type { Document, DocumentAttachment, Task } from '../types'
+import { extractDocBlocks, extractDocPlainText, truncate } from '../lib/docPreview'
+
+function downloadBlob(blob: Blob, filename: string) {
+  const u = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = u
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(u)
+}
 
 export default function DocumentEditorPage() {
   const { projectId, docId } = useParams<{ projectId: string; docId: string }>()
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const qc = useQueryClient()
   const { addToast } = useUIStore()
   const { data: doc, isLoading, isError } = useQuery({
@@ -38,9 +50,54 @@ export default function DocumentEditorPage() {
   })
   const [taskToLink, setTaskToLink] = useState('')
   const [selectedMeetingId, setSelectedMeetingId] = useState('')
+  const focusIndexRaw = searchParams.get('focus')
+  const focusIndex = focusIndexRaw ? Number(focusIndexRaw) : null
+
+  const blocks = useMemo(() => extractDocBlocks(doc?.content), [doc?.content])
+  const blockRefs = useMemo(() => new Map<number, HTMLDivElement>(), [])
+
+  const plainTextForSummary = useMemo(() => extractDocPlainText(doc?.content), [doc?.content])
+  const [essenceSummary, setEssenceSummary] = useState<string | null>(null)
+  const [essenceError, setEssenceError] = useState<string | null>(null)
+
+  const summarizeEssenceMutation = useMutation({
+    mutationFn: () => aiApi.summarizeDocument(plainTextForSummary).then((r) => r.data.summary),
+    onSuccess: (summary) => {
+      setEssenceSummary(summary)
+      setEssenceError(null)
+    },
+    onError: () => {
+      setEssenceError('Не удалось построить сводку по документу.')
+    },
+  })
+
+  useEffect(() => {
+    // Reset summary when doc changes.
+    setEssenceSummary(null)
+    setEssenceError(null)
+  }, [doc?.id, doc?.updated_at])
+
+  useEffect(() => {
+    if (!doc) return
+    const txt = (plainTextForSummary || '').trim()
+    if (!txt) {
+      setEssenceError('В документе пока нет текста для анализа.')
+      return
+    }
+    if (essenceSummary !== null || essenceError !== null) return
+    summarizeEssenceMutation.mutate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc?.id, doc?.updated_at, plainTextForSummary])
+
+  useEffect(() => {
+    if (focusIndex === null || !Number.isFinite(focusIndex)) return
+    const el = blockRefs.get(focusIndex)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [focusIndex, blocks, blockRefs])
   const initialText = useMemo(() => {
     if (!doc?.content) return ''
-    return JSON.stringify(doc.content, null, 2)
+    return extractDocPlainText(doc.content)
   }, [doc])
   const [text, setText] = useState('')
   useEffect(() => {
@@ -49,12 +106,18 @@ export default function DocumentEditorPage() {
 
   const saveVersion = useMutation({
     mutationFn: () => {
-      let content: Record<string, unknown>
-      try {
-        content = JSON.parse(text || '{}')
-      } catch {
-        content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] }
-      }
+      const raw = (text || '').trim()
+      const paragraphs = raw ? raw.split(/\n{2,}/g).map((p) => p.trim()).filter(Boolean) : []
+      const content =
+        paragraphs.length > 0
+          ? {
+              type: 'doc',
+              content: paragraphs.map((p) => ({
+                type: 'paragraph',
+                content: [{ type: 'text', text: p }],
+              })),
+            }
+          : { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '' }] }] }
       return documentsApi
         .saveVersion(
           projectId!,
@@ -97,6 +160,64 @@ export default function DocumentEditorPage() {
     },
   })
 
+  const uploadFile = useMutation({
+    mutationFn: (file: File) => documentsApi.uploadAttachment(projectId!, docId!, file).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['doc', projectId, docId] })
+      qc.invalidateQueries({ queryKey: ['docs', projectId] })
+      addToast({ type: 'success', title: 'Файл загружен' })
+    },
+    onError: (err: any) => {
+      const detail = err?.response?.data?.detail
+      // Бэкенд возвращает detail типа:
+      // - "File too large"
+      // - "unsupported extension: .ext"
+      const title =
+        typeof detail === 'string' && detail.trim()
+          ? `Не удалось загрузить файл: ${detail}`
+          : 'Не удалось загрузить файл (размер или тип)'
+      addToast({ type: 'error', title })
+    },
+  })
+
+  const removeAttachment = useMutation({
+    mutationFn: (attachmentId: string) => documentsApi.deleteAttachment(projectId!, docId!, attachmentId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['doc', projectId, docId] })
+      qc.invalidateQueries({ queryKey: ['docs', projectId] })
+      addToast({ type: 'success', title: 'Вложение удалено' })
+    },
+  })
+
+  const exportTxt = useMutation({
+    mutationFn: () => documentsApi.exportPlain(projectId!, docId!).then((r) => r.data),
+    onSuccess: (blob) => {
+      const name = doc?.title ? `${doc.title.replace(/[^\w\-_.\s]/g, '_').slice(0, 80)}.txt` : 'document.txt'
+      downloadBlob(blob, name)
+      addToast({ type: 'info', title: 'Загрузка TXT начата' })
+    },
+    onError: () => addToast({ type: 'error', title: 'Не удалось экспортировать' }),
+  })
+
+  const deleteDoc = useMutation({
+    mutationFn: () => documentsApi.delete(projectId!, docId!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['docs', projectId] })
+      addToast({ type: 'success', title: 'Документ удалён' })
+      navigate(`/projects/${projectId}/documents`)
+    },
+    onError: () => addToast({ type: 'error', title: 'Не удалось удалить документ' }),
+  })
+
+  const downloadAttachment = async (att: DocumentAttachment) => {
+    try {
+      const res = await documentsApi.downloadAttachment(projectId!, docId!, String(att.id))
+      downloadBlob(res.data, att.original_filename)
+    } catch {
+      addToast({ type: 'error', title: 'Не удалось скачать файл' })
+    }
+  }
+
   if (!projectId || !docId) return null
 
   return (
@@ -119,23 +240,145 @@ export default function DocumentEditorPage() {
             <StatusBadge status={doc.status ?? 'draft'} />
           </div>
           <div className="card p-4 text-slate-300 text-sm space-y-3">
+            <div className="border border-slate-700 rounded p-3 bg-slate-800/20">
+              <div className="text-xs font-semibold text-slate-200 mb-2">Суть документа</div>
+              {essenceSummary ? (
+                <pre className="text-sm text-slate-200 whitespace-pre-wrap font-sans mb-3">{essenceSummary}</pre>
+              ) : essenceError ? (
+                <div className="text-xs text-red-300 mb-3">{essenceError}</div>
+              ) : (
+                <div className="text-xs text-slate-500 mb-3">Анализируем документ…</div>
+              )}
+              {blocks.length === 0 ? (
+                <div className="text-xs text-slate-500">Части документа не распознаны.</div>
+              ) : (
+                <div className="max-h-48 overflow-auto space-y-2 pr-1">
+                  {blocks.slice(0, 40).map((b) => (
+                    <div
+                      key={`${b.type}-${b.index}`}
+                      ref={(el) => {
+                        if (!el) return
+                        blockRefs.set(b.index, el)
+                      }}
+                      className={`cursor-pointer border rounded px-2 py-2 ${
+                        focusIndex === b.index
+                          ? 'border-indigo-500 bg-indigo-500/10 text-indigo-200'
+                          : 'border-slate-700 bg-slate-900/10 hover:border-slate-500 text-slate-200'
+                      }`}
+                      onClick={() =>
+                        setSearchParams((sp) => {
+                          const p = new URLSearchParams(sp)
+                          p.set('focus', String(b.index))
+                          return p
+                        })
+                      }
+                      title="Клик = выделить часть"
+                    >
+                      <div className="text-[11px] text-slate-400">
+                        {b.type === 'heading' ? 'Заголовок' : 'Абзац'} #{b.index}
+                      </div>
+                      <div className="text-sm mt-1">{truncate(b.text, 160)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {blocks.length > 40 && <div className="text-[11px] text-slate-500 mt-2">Показаны первые 40 частей.</div>}
+            </div>
             <textarea
-              className="input resize-none font-mono text-xs"
+              className="input resize-none text-sm"
               rows={14}
               value={text}
               onChange={(e) => setText(e.target.value)}
+              placeholder="Введите текст документа. Сохраняется в документ как секции (разделяются пустой строкой)."
             />
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button className="btn-primary" onClick={() => saveVersion.mutate()} disabled={saveVersion.isPending}>
                 {saveVersion.isPending ? 'Сохранение...' : 'Сохранить версию'}
               </button>
               <button className="btn-secondary" onClick={() => approveDoc.mutate()} disabled={approveDoc.isPending}>
                 {approveDoc.isPending ? 'Утверждение...' : 'Утвердить'}
               </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => exportTxt.mutate()}
+                disabled={exportTxt.isPending}
+              >
+                <FileText className="w-4 h-4" />
+                {exportTxt.isPending ? 'Экспорт…' : 'Скачать TXT'}
+              </button>
+              <button
+                type="button"
+                className="btn-danger"
+                onClick={() => {
+                  if (window.confirm('Удалить документ и все вложения?')) deleteDoc.mutate()
+                }}
+                disabled={deleteDoc.isPending}
+              >
+                <Trash2 className="w-4 h-4" />
+                Удалить документ
+              </button>
             </div>
           </div>
           </div>
           <div className="space-y-3">
+            <div className="card p-3">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
+                <Paperclip className="w-4 h-4 text-indigo-400" />
+                Вложения (PDF, XML, Office…)
+              </h3>
+              <label className="flex items-center gap-2 text-xs text-slate-400 mb-2 cursor-pointer">
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,.xml,.txt,.md,.json,.csv,.doc,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.zip,.html,.yaml,.yml"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) uploadFile.mutate(f)
+                    e.target.value = ''
+                  }}
+                />
+                <span className="btn-secondary text-xs inline-flex items-center gap-1">
+                  <Upload className="w-3.5 h-3.5" />
+                  {uploadFile.isPending ? 'Загрузка…' : 'Загрузить файл'}
+                </span>
+                <span className="text-slate-500">до ~26 МБ</span>
+              </label>
+              <ul className="space-y-1 max-h-48 overflow-auto">
+                {(doc.attachments ?? []).map((a) => (
+                  <li
+                    key={a.id}
+                    className="flex items-center justify-between gap-2 text-xs text-slate-300 bg-slate-800/50 rounded px-2 py-1"
+                  >
+                    <span className="truncate flex-1" title={a.original_filename}>
+                      {a.original_filename}
+                    </span>
+                    <span className="text-slate-500 shrink-0">{(a.size_bytes / 1024).toFixed(1)} КБ</span>
+                    <button
+                      type="button"
+                      className="btn-ghost p-1 shrink-0"
+                      title="Скачать"
+                      onClick={() => downloadAttachment(a)}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost p-1 shrink-0 text-red-400"
+                      title="Удалить"
+                      onClick={() => {
+                        if (window.confirm('Удалить вложение?')) removeAttachment.mutate(String(a.id))
+                      }}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </li>
+                ))}
+                {(!doc.attachments || doc.attachments.length === 0) && (
+                  <li className="text-xs text-slate-500">Пока нет файлов</li>
+                )}
+              </ul>
+            </div>
             <div className="card p-3">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Связанные задачи</h3>
               <div className="flex gap-2 mb-2">

@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Check, CalendarClock } from 'lucide-react'
+import { ArrowLeft, Check, CalendarClock, Video } from 'lucide-react'
 import { meetingsApi } from '../api'
 import { StatusBadge } from '../components/common/StatusBadge'
 import { format } from 'date-fns'
@@ -130,6 +130,26 @@ export default function MeetingDetailPage() {
             <p className="text-sm text-slate-400 mb-4">{format(new Date(m.scheduled_at), 'PPp', { locale: ru })}</p>
           )}
           {m.description && <p className="text-slate-300">{m.description}</p>}
+
+          {m.jitsi_room_id && (
+            <div className="card p-0 overflow-hidden rounded-lg border border-slate-700">
+              <div className="px-4 py-2 border-b border-slate-700 bg-slate-800/50 text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <Video className="w-4 h-4 text-indigo-400" />
+                Видеовстреча
+              </div>
+              <iframe
+                title="Видеовстреча Jitsi"
+                src={
+                  m.jitsi_room_url ||
+                  `https://${import.meta.env.VITE_JITSI_DOMAIN || 'meet.jit.si'}/${m.jitsi_room_id}`
+                }
+                className="w-full h-[min(70vh,560px)] border-0 bg-black"
+                allow="camera; microphone; fullscreen; display-capture; autoplay"
+                allowFullScreen
+              />
+            </div>
+          )}
+
           <div className="card p-4">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">Участники и ответы</h2>
             <div className="flex flex-wrap items-center gap-2 mb-3">

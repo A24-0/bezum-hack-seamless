@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import { CheckCircle, Clock, FileText, Video, GitPullRequest, TrendingUp } from 'lucide-react'
 import { projectsApi, epochsApi, tasksApi, documentsApi, meetingsApi } from '../api'
 import { ProgressRing } from '../components/common/ProgressRing'
@@ -33,6 +34,21 @@ export default function ProjectOverviewPage() {
   const doneTasks = (tasks as any[]).filter(t => t.status === 'done').length
   const inProgressTasks = (tasks as any[]).filter(t => t.status === 'in_progress').length
   const progress = tasks.length > 0 ? Math.round(doneTasks / tasks.length * 100) : 0
+
+  const taskCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      backlog: 0,
+      todo: 0,
+      in_progress: 0,
+      needs_info: 0,
+      review: 0,
+      done: 0,
+    }
+    for (const t of tasks as any[]) {
+      if (counts[t.status] != null) counts[t.status] += 1
+    }
+    return counts
+  }, [tasks])
   const activeEpoch = (epochs as any[]).find(e => e.status === 'active')
   const upcomingMeetings = (meetings as any[]).filter(m => m.status === 'scheduled' || m.status === 'scheduling').slice(0, 3)
 
@@ -46,7 +62,7 @@ export default function ProjectOverviewPage() {
             <StatusBadge status={project?.status ?? 'active'} />
             {project?.gitlab_repo_url && (
               <a href={project.gitlab_repo_url} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
-                <GitPullRequest className="w-3 h-3" /> GitLab
+                <GitPullRequest className="w-3 h-3" /> GitHub
               </a>
             )}
           </div>
@@ -66,6 +82,50 @@ export default function ProjectOverviewPage() {
         <StatCard icon={TrendingUp} label="В работе" value={inProgressTasks} color="text-yellow-400" />
         <StatCard icon={FileText} label="Документов" value={docs.length} color="text-blue-400" />
         <StatCard icon={Video} label="Встреч" value={meetings.length} color="text-purple-400" />
+      </div>
+
+      <div className="card p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Диаграмма статусов задач</h2>
+          <div className="text-xs text-slate-500">{tasks.length} задач</div>
+        </div>
+        <div className="h-4 rounded bg-slate-800/50 flex overflow-hidden border border-slate-700">
+          {['backlog', 'todo', 'in_progress', 'needs_info', 'review', 'done'].map((s) => {
+            const n = taskCounts[s] || 0
+            const pct = tasks.length > 0 ? (n / tasks.length) * 100 : 0
+            if (pct <= 0.01) return null
+            return (
+              <div
+                key={s}
+                className="h-full"
+                style={{
+                  width: `${pct}%`,
+                  background:
+                    s === 'done'
+                      ? 'rgba(34,197,94,.45)'
+                      : s === 'in_progress'
+                        ? 'rgba(234,179,8,.45)'
+                        : s === 'review'
+                          ? 'rgba(245,158,11,.45)'
+                          : s === 'needs_info'
+                            ? 'rgba(249,115,22,.45)'
+                            : s === 'todo'
+                              ? 'rgba(59,130,246,.45)'
+                              : 'rgba(148,163,184,.45)',
+                }}
+                title={`${s}: ${n}`}
+              />
+            )
+          })}
+        </div>
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {Object.entries(taskCounts).map(([s, n]) => (
+            <div key={s} className="text-xs text-slate-500 flex items-center justify-between">
+              <span>{s}</span>
+              <span className="text-slate-300 tabular-nums">{n}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

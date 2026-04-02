@@ -67,6 +67,27 @@ class Document(Base):
     approvals: Mapped[list["DocumentApproval"]] = relationship(
         "DocumentApproval", back_populates="document", cascade="all, delete-orphan"
     )
+    attachments: Mapped[list["DocumentAttachment"]] = relationship(
+        "DocumentAttachment", back_populates="document", cascade="all, delete-orphan"
+    )
+
+
+class DocumentAttachment(Base):
+    __tablename__ = "document_attachments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    document_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(512), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    document: Mapped["Document"] = relationship("Document", back_populates="attachments")
+    created_by: Mapped["User"] = relationship("User", foreign_keys=[created_by_id])
 
 
 class DocumentTaskLink(Base):

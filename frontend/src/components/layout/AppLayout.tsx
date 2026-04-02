@@ -1,9 +1,11 @@
 import { Outlet, Link, useNavigate } from 'react-router-dom'
-import { Bell, LogOut, Layers } from 'lucide-react'
+import { Bell, LogOut, Layers, Shield, UserRound } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { UserAvatar } from '../common/UserAvatar'
 import { ThemeToggleButton } from '../common/ThemeToggleButton'
+import { VoiceControl } from '../common/VoiceControl'
+import ChatBotDock from '../common/ChatBotDock'
 import { ROLE_LABELS } from '../../lib/utils'
 
 export default function AppLayout() {
@@ -28,6 +30,18 @@ export default function AppLayout() {
         <div className="flex-1" />
 
         <ThemeToggleButton />
+
+        {user?.role === 'admin' && (
+          <Link to="/admin" className="btn-ghost p-2 rounded-md flex items-center gap-1 text-sm" title="Админ-панель">
+            <Shield className="w-4 h-4" />
+            <span className="hidden sm:inline">Админ</span>
+          </Link>
+        )}
+
+        <Link to="/cabinet" className="btn-ghost p-2 rounded-md flex items-center gap-1 text-sm" title="Личный кабинет">
+          <UserRound className="w-4 h-4" />
+          <span className="hidden sm:inline">Кабинет</span>
+        </Link>
 
         <Link to="/notifications" className="relative btn-ghost p-2 rounded-md">
           <Bell className="w-4 h-4" />
@@ -55,6 +69,9 @@ export default function AppLayout() {
       <main className="flex-1">
         <Outlet />
       </main>
+
+      <VoiceControl />
+      <ChatBotDock />
     </div>
   )
 }

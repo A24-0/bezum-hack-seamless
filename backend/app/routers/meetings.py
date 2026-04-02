@@ -12,6 +12,7 @@ from app.models.notification import NotificationType
 from app.services.auth import get_current_user
 from app.services.notification import create_notification, notify_many
 from app.services.summarization import summarize_transcript
+from app.config import settings
 from app.utils.permissions import require_project_access, require_manager_or_developer
 from app.utils.meeting_datetime import assert_reasonable_meeting_datetime
 
@@ -52,6 +53,7 @@ def _meeting_dict(m: Meeting) -> dict:
         "scheduled_at": m.scheduled_at,
         "duration_minutes": m.duration_minutes,
         "jitsi_room_id": m.jitsi_room_id,
+        "jitsi_room_url": f"https://{settings.JITSI_DOMAIN}/{m.jitsi_room_id}",
         "recording_url": m.recording_url,
         "transcript": m.transcript,
         "summary": m.summary,

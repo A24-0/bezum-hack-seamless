@@ -1,6 +1,6 @@
 from app.database import Base  # noqa: F401
 
-from app.models.user import User, ProjectMember, UserRole, ProjectMemberRole  # noqa: F401
+from app.models.user import User, ProjectMember, UserRole, ProjectMemberRole, UserTech  # noqa: F401
 from app.models.project import Project, Release, ProjectStatus  # noqa: F401
 from app.models.epoch import Epoch, EpochStatus  # noqa: F401
 from app.models.task import Task, TaskLabel, TaskWatcher, TaskStatus  # noqa: F401

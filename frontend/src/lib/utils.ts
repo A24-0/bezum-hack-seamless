@@ -85,6 +85,7 @@ export const STATUS_LABELS: Record<string, string> = {
 
 /** Подписи ролей пользователя в интерфейсе */
 export const ROLE_LABELS: Record<string, string> = {
+  admin: 'Администратор',
   manager: 'Менеджер',
   developer: 'Разработчик',
   customer: 'Заказчик',

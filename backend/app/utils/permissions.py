@@ -1,8 +1,9 @@
-from fastapi import HTTPException, status
+from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.user import User, ProjectMember, UserRole, ProjectMemberRole
+from app.services.auth import get_current_user
 from app.models.document import DocumentVisibility
 
 
@@ -17,10 +18,10 @@ async def get_project_member(db: AsyncSession, project_id: int, user_id: int) ->
 
 
 async def require_project_access(db: AsyncSession, project_id: int, user: User) -> ProjectMember:
-    if user.role == UserRole.manager:
+    if user.role in (UserRole.manager, UserRole.admin):
         member = await get_project_member(db, project_id, user.id)
         if not member:
-            # Managers can access all projects but may not be explicitly listed
+            # Managers and admins can access all projects but may not be explicitly listed
             # Create a virtual member object
             member = ProjectMember(project_id=project_id, user_id=user.id, role=ProjectMemberRole.manager)
         return member
@@ -42,6 +43,12 @@ async def require_manager(db: AsyncSession, project_id: int, user: User) -> Proj
     if member.role != ProjectMemberRole.manager:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required")
     return member
+
+
+async def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return current_user
 
 
 def can_view_document(member_role: ProjectMemberRole, visibility: DocumentVisibility) -> bool:

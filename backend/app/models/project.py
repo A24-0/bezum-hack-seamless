@@ -24,6 +24,7 @@ class Project(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     gitlab_repo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    gitlab_project_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
     # Relationships
     members: Mapped[list["ProjectMember"]] = relationship(

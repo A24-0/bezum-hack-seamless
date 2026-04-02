@@ -15,11 +15,18 @@ import type {
   Comment,
   TimeSlot,
   PaginatedResponse,
+  CabinetMe,
+  CabinetMatchResponse,
+  CabinetUser,
 } from '../types'
 
 export const api = axios.create({
   baseURL: '/api',
-  headers: { 'Content-Type': 'application/json' },
+  // IMPORTANT:
+  // For JSON requests axios will set the correct Content-Type automatically.
+  // For FormData uploads we must not force `application/json`, otherwise FastAPI
+  // won't parse the multipart body and returns 422.
+  headers: {},
 })
 
 api.interceptors.request.use((config) => {
@@ -139,6 +146,19 @@ export const documentsApi = {
     api.post(`/projects/${projectId}/documents/${docId}/tasks/${taskId}`),
   unlinkTask: (projectId: string, docId: string, taskId: string) =>
     api.delete(`/projects/${projectId}/documents/${docId}/tasks/${taskId}`),
+  uploadAttachment: (projectId: string, docId: string, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post(`/projects/${projectId}/documents/${docId}/attachments`, fd)
+  },
+  downloadAttachment: (projectId: string, docId: string, attachmentId: string) =>
+    api.get(`/projects/${projectId}/documents/${docId}/attachments/${attachmentId}/download`, {
+      responseType: 'blob',
+    }),
+  deleteAttachment: (projectId: string, docId: string, attachmentId: string) =>
+    api.delete(`/projects/${projectId}/documents/${docId}/attachments/${attachmentId}`),
+  exportPlain: (projectId: string, docId: string) =>
+    api.get(`/projects/${projectId}/documents/${docId}/export-plain`, { responseType: 'blob' }),
 }
 
 // Meetings
@@ -175,8 +195,41 @@ export const cicdApi = {
     api.post(`/projects/${projectId}/prs/${prId}/link`, { task_id: taskId }),
   listReleases: (projectId: string) =>
     api.get<Release[]>(`/projects/${projectId}/releases`),
-  syncGitlab: (projectId: string) =>
-    api.post(`/projects/${projectId}/sync`),
+  syncGitHub: (projectId: string) =>
+    api.post<{ status: string; message?: string; synced: number; total_from_gitlab: number }>(
+      `/projects/${projectId}/sync`
+    ),
+}
+
+// Admin (роль admin)
+export const adminApi = {
+  stats: () =>
+    api.get<{
+      users: number
+      projects: number
+      tasks: number
+      epochs: number
+      documents: number
+      meetings: number
+      tasks_by_status?: Record<string, number>
+      documents_by_status?: Record<string, number>
+      epochs_by_status?: Record<string, number>
+    }>('/admin/stats'),
+  users: () =>
+    api.get<
+      {
+        id: number
+        email: string
+        name: string
+        role: string
+        is_active: boolean
+        created_at: string
+      }[]
+    >('/admin/users'),
+  updateUser: (
+    userId: number,
+    data: { name?: string; role?: string; is_active?: boolean }
+  ) => api.patch(`/admin/users/${userId}`, data),
 }
 
 // Notifications
@@ -185,6 +238,26 @@ export const notificationsApi = {
   markRead: (id: string) => api.post(`/notifications/${id}/read`),
   markAllRead: () => api.post('/notifications/read-all'),
   unreadCount: () => api.get<{ count: number }>('/notifications/unread-count'),
+}
+
+// Cabinet (personal profile + tech stack)
+export const cabinetApi = {
+  me: () => api.get<CabinetMe>('/cabinet/me'),
+  updateMe: (data: { name?: string; git_repo_url?: string | null; techs: string[] }) =>
+    api.put<CabinetMe>('/cabinet/me', data),
+  user: (userId: number) => api.get<CabinetUser>(`/cabinet/users/${userId}`),
+  techs: () => api.get<{ techs: string[] }>('/cabinet/techs'),
+  matchByTech: (techs: string) =>
+    api.get<CabinetMatchResponse>('/cabinet/match', {
+      params: { techs },
+    }),
+}
+
+// AI assistant
+export const aiApi = {
+  chat: (message: string, projectId?: number) =>
+    api.post<{ answer: string }>('/ai/chat', { message, project_id: projectId }),
+  summarizeDocument: (text: string) => api.post<{ summary: string }>('/ai/summarize-document', { text }),
 }
 
 // Users (for member search)

@@ -1,7 +1,9 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from collections import defaultdict
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
@@ -19,14 +21,36 @@ from app.utils.permissions import require_project_access, require_manager_or_dev
 router = APIRouter(prefix="/projects/{project_id}/tasks", tags=["tasks"])
 
 
+async def _pr_sidecar_for_task(db: AsyncSession, project_id: int, task_id: int) -> dict:
+    cnt = await db.execute(
+        select(func.count(PullRequest.id)).where(
+            PullRequest.project_id == project_id,
+            PullRequest.task_id == task_id,
+        )
+    )
+    n = int(cnt.scalar_one() or 0)
+    preview: list[dict] = []
+    if n:
+        pr_result = await db.execute(
+            select(PullRequest)
+            .where(PullRequest.project_id == project_id, PullRequest.task_id == task_id)
+            .order_by(PullRequest.updated_at.desc())
+            .limit(3)
+        )
+        for pr in pr_result.scalars():
+            st = pr.status.value if hasattr(pr.status, "value") else str(pr.status)
+            preview.append({"title": pr.title, "url": pr.url, "status": st})
+    return {"linked_pr_count": n, "linked_prs": preview}
+
+
 def _user_dict(u: User | None) -> dict | None:
     if not u:
         return None
     return {"id": u.id, "name": u.name, "email": u.email, "role": u.role}
 
 
-def _task_dict(task: Task) -> dict:
-    return {
+def _task_dict(task: Task, **extra) -> dict:
+    d = {
         "id": task.id,
         "project_id": task.project_id,
         "epoch_id": task.epoch_id,
@@ -45,6 +69,8 @@ def _task_dict(task: Task) -> dict:
         "labels": [{"id": l.id, "label": l.label, "color": l.color} for l in (task.labels or [])],
         "watchers": [{"id": w.user_id} for w in (task.watchers or [])],
     }
+    d.update(extra)
+    return d
 
 
 @router.get("")
@@ -70,7 +96,36 @@ async def list_tasks(
         query = query.where(Task.assignee_id == assignee_id)
     query = query.order_by(Task.order_index)
     result = await db.execute(query)
-    return [_task_dict(t) for t in result.scalars().all()]
+    tasks = result.scalars().all()
+    if not tasks:
+        return []
+
+    task_ids = [t.id for t in tasks]
+    pr_counts: dict[int, int] = defaultdict(int)
+    pr_preview: dict[int, list[dict]] = defaultdict(list)
+
+    pr_result = await db.execute(
+        select(PullRequest)
+        .where(PullRequest.project_id == project_id, PullRequest.task_id.in_(task_ids))
+        .order_by(PullRequest.updated_at.desc())
+    )
+    for pr in pr_result.scalars():
+        tid = pr.task_id
+        if tid is None:
+            continue
+        pr_counts[tid] += 1
+        if len(pr_preview[tid]) < 3:
+            st = pr.status.value if hasattr(pr.status, "value") else str(pr.status)
+            pr_preview[tid].append({"title": pr.title, "url": pr.url, "status": st})
+
+    return [
+        _task_dict(
+            t,
+            linked_pr_count=pr_counts.get(t.id, 0),
+            linked_prs=pr_preview.get(t.id, []),
+        )
+        for t in tasks
+    ]
 
 
 @router.post("", status_code=201)
@@ -88,7 +143,8 @@ async def create_task(
     await db.refresh(task, ["assignee", "reporter", "labels", "watchers"])
     if task.assignee_id and task.assignee_id != current_user.id:
         await create_notification(db, task.assignee_id, NotificationType.mention, f"Task assigned: {task.title}", f"You were assigned to task '{task.title}'", "task", str(task.id))
-    return _task_dict(task)
+    extra = await _pr_sidecar_for_task(db, project_id, task.id)
+    return _task_dict(task, **extra)
 
 
 @router.get("/{task_id}")
@@ -107,7 +163,8 @@ async def get_task(
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(404, "Task not found")
-    return _task_dict(task)
+    extra = await _pr_sidecar_for_task(db, project_id, task.id)
+    return _task_dict(task, **extra)
 
 
 @router.put("/{task_id}")
@@ -145,7 +202,8 @@ async def update_task(
         )
     await db.refresh(task)
     await db.refresh(task, ["assignee", "reporter", "labels", "watchers"])
-    return _task_dict(task)
+    extra = await _pr_sidecar_for_task(db, project_id, task.id)
+    return _task_dict(task, **extra)
 
 
 @router.patch("/{task_id}/status")
@@ -185,7 +243,8 @@ async def update_task_status(
     )
     await db.refresh(task)
     await db.refresh(task, ["assignee", "reporter", "labels", "watchers"])
-    return _task_dict(task)
+    extra = await _pr_sidecar_for_task(db, project_id, task.id)
+    return _task_dict(task, **extra)
 
 
 @router.delete("/{task_id}", status_code=204)

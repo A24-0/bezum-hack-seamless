@@ -11,6 +11,7 @@ import ProjectLayout from './components/layout/ProjectLayout'
 import AppLayout from './components/layout/AppLayout'
 import ProjectOverviewPage from './pages/ProjectOverviewPage'
 import EpochsPage from './pages/EpochsPage'
+import EpochPassPage from './pages/EpochPassPage'
 import KanbanPage from './pages/KanbanPage'
 import DocumentsPage from './pages/DocumentsPage'
 import DocumentEditorPage from './pages/DocumentEditorPage'
@@ -20,6 +21,9 @@ import CICDPage from './pages/CICDPage'
 import MembersPage from './pages/MembersPage'
 import NotificationsPage from './pages/NotificationsPage'
 import ProjectRelationsPage from './pages/ProjectRelationsPage'
+import AdminPage from './pages/AdminPage'
+import CabinetPage from './pages/CabinetPage'
+import CabinetUserPage from './pages/CabinetUserPage'
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
@@ -30,6 +34,12 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 function NotificationsListener() {
   useNotifications()
   return null
+}
+
+function AdminGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAuthStore()
+  if (user?.role !== 'admin') return <Navigate to="/projects" replace />
+  return <>{children}</>
 }
 
 export default function App() {
@@ -55,11 +65,22 @@ export default function App() {
           <Route index element={<Navigate to="/projects" replace />} />
           <Route path="projects" element={<ProjectsListPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="cabinet" element={<CabinetPage />} />
+          <Route path="cabinet/users/:userId" element={<CabinetUserPage />} />
+          <Route
+            path="admin"
+            element={
+              <AdminGuard>
+                <AdminPage />
+              </AdminGuard>
+            }
+          />
 
           <Route path="projects/:projectId" element={<ProjectLayout />}>
             <Route index element={<Navigate to="overview" replace />} />
             <Route path="overview" element={<ProjectOverviewPage />} />
             <Route path="epochs" element={<EpochsPage />} />
+            <Route path="epochs/:epochId/pass" element={<EpochPassPage />} />
             <Route path="kanban" element={<KanbanPage />} />
             <Route path="documents" element={<DocumentsPage />} />
             <Route path="documents/:docId" element={<DocumentEditorPage />} />

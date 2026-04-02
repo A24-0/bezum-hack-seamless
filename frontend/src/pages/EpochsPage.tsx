@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Clock, Target, Rocket } from 'lucide-react'
 import { epochsApi } from '../api'
@@ -8,6 +8,7 @@ import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { isEndDateAfterStart, isValidDateInputYmd } from '../lib/dateValidation'
 import { useUIStore } from '../stores/uiStore'
+import { invalidateProjectScopedData } from '../lib/invalidateProjectQueries'
 
 function EpochCard({ epoch, projectId }: { epoch: any; projectId: string }) {
   const qc = useQueryClient()
@@ -16,7 +17,10 @@ function EpochCard({ epoch, projectId }: { epoch: any; projectId: string }) {
 
   const releaseMutation = useMutation({
     mutationFn: () => epochsApi.createRelease(projectId, epoch.id, releaseForm as any).then(r => r.data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['epochs', projectId] }); setShowRelease(false) },
+    onSuccess: () => {
+      invalidateProjectScopedData(qc, projectId)
+      setShowRelease(false)
+    },
   })
 
   const statusColor: Record<string, string> = {
@@ -38,6 +42,11 @@ function EpochCard({ epoch, projectId }: { epoch: any; projectId: string }) {
         <div className="ml-4 text-right shrink-0">
           <div className="text-2xl font-bold text-slate-900 dark:text-white">{epoch.progress || 0}%</div>
           <div className="text-xs text-slate-400">{epoch.completed_task_count}/{epoch.task_count} задач</div>
+          <div className="mt-2">
+            <Link to={`../epochs/${epoch.id}/pass`} className="btn-secondary text-xs py-1 inline-flex items-center gap-1">
+              Проходить
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -88,7 +97,7 @@ export default function EpochsPage() {
     mutationFn: (payload: Record<string, unknown>) =>
       epochsApi.create(projectId!, payload as any).then(r => r.data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['epochs', projectId] })
+      invalidateProjectScopedData(qc, projectId)
       setShowNew(false)
       setForm({ name: '', goals: '', start_date: '', end_date: '', status: 'planning' })
     },

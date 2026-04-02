@@ -1,6 +1,11 @@
 import re
+import uuid
+from pathlib import Path
 import difflib
-from fastapi import APIRouter, Depends, HTTPException
+from html import unescape as html_unescape
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Request
+from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
@@ -9,6 +14,7 @@ from app.database import get_db
 from app.models.user import User, ProjectMemberRole, ProjectMember
 from app.models.document import (
     Document,
+    DocumentAttachment,
     DocumentTaskLink,
     DocumentVersion,
     DocumentVisibility,
@@ -27,6 +33,16 @@ from app.schemas.document import (
 )
 from app.services.auth import get_current_user
 from app.services.notification import create_notification, notify_many
+from app.services.storage import (
+    delete_attachment_file,
+    ensure_upload_root,
+    attachment_dir,
+    ALLOWED_EXTENSIONS,
+    safe_original_filename,
+    write_attachment_file,
+    attachment_path,
+)
+from app.config import settings
 from app.utils.permissions import require_project_access, require_manager_or_developer, can_view_document
 
 router = APIRouter(prefix="/projects/{project_id}/documents", tags=["documents"])
@@ -36,6 +52,19 @@ def _doc_dict(doc: Document) -> dict:
     created_by = None
     if hasattr(doc, 'created_by') and doc.created_by:
         created_by = {"id": doc.created_by.id, "name": doc.created_by.name, "email": doc.created_by.email, "role": doc.created_by.role}
+    attachments = []
+    atts = getattr(doc, "attachments", None)
+    if atts is not None:
+        for a in atts:
+            attachments.append(
+                {
+                    "id": a.id,
+                    "original_filename": a.original_filename,
+                    "mime_type": a.mime_type,
+                    "size_bytes": a.size_bytes,
+                    "created_at": a.created_at,
+                }
+            )
     return {
         "id": doc.id,
         "project_id": doc.project_id,
@@ -49,6 +78,7 @@ def _doc_dict(doc: Document) -> dict:
         "created_by_id": doc.created_by_id,
         "created_at": doc.created_at,
         "updated_at": doc.updated_at,
+        "attachments": attachments,
     }
 
 
@@ -121,7 +151,7 @@ async def list_documents(
     member = await require_project_access(db, project_id, current_user)
     query = (
         select(Document)
-        .options(selectinload(Document.created_by))
+        .options(selectinload(Document.created_by), selectinload(Document.attachments))
         .where(Document.project_id == project_id)
     )
     if epoch_id:
@@ -153,7 +183,7 @@ async def create_document(
     db.add(version)
     await db.flush()
     await db.refresh(doc)
-    await db.refresh(doc, ["created_by"])
+    await db.refresh(doc, ["created_by", "attachments"])
     return _doc_dict(doc)
 
 
@@ -166,7 +196,7 @@ async def get_document(
 ):
     member = await require_project_access(db, project_id, current_user)
     result = await db.execute(
-        select(Document).options(selectinload(Document.created_by))
+        select(Document).options(selectinload(Document.created_by), selectinload(Document.attachments))
         .where(Document.id == doc_id, Document.project_id == project_id)
     )
     doc = result.scalar_one_or_none()
@@ -175,6 +205,246 @@ async def get_document(
     if not can_view_document(member.role, doc.visibility):
         raise HTTPException(403, "Access denied")
     return _doc_dict(doc)
+
+
+@router.get("/{doc_id}/export-plain")
+async def export_document_plain(
+    project_id: int,
+    doc_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Текстовый экспорт содержимого редактора (TipTap) для скачивания как «реальный» текст."""
+    member = await require_project_access(db, project_id, current_user)
+    result = await db.execute(
+        select(Document).where(Document.id == doc_id, Document.project_id == project_id)
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    if not can_view_document(member.role, doc.visibility):
+        raise HTTPException(403, "Access denied")
+    text = _tiptap_plain_text(doc.content)
+    safe_title = re.sub(r"[^\w\-_.]", "_", doc.title)[:80] or "document"
+    return PlainTextResponse(
+        text or "",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.txt"'},
+    )
+
+
+@router.post("/{doc_id}/attachments", status_code=201)
+async def upload_attachment(
+    project_id: int,
+    doc_id: int,
+    request: Request,
+    file: UploadFile | None = File(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await require_manager_or_developer(db, project_id, current_user)
+
+    # Be tolerant to malformed multipart requests from the frontend.
+    # If FastAPI couldn't parse `file` -> try to read from request.form().
+    if file is None:
+        try:
+            form = await request.form()
+            candidate = form.get("file")
+            if isinstance(candidate, UploadFile):
+                file = candidate
+            else:
+                # Fallback: pick the first UploadFile field (if any)
+                for v in form.values():
+                    if isinstance(v, UploadFile):
+                        file = v
+                        break
+        except Exception:
+            # Most common reason: frontend sends wrong Content-Type (not multipart/form-data).
+            raise HTTPException(400, "Invalid upload request: expected multipart/form-data with field `file`.")
+
+    if file is None:
+        raise HTTPException(400, "No file uploaded. Expected multipart/form-data with field `file`.")
+    result = await db.execute(
+        select(Document).where(Document.id == doc_id, Document.project_id == project_id)
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    raw_name = safe_original_filename(file.filename or "file")
+
+    # Stream upload to disk (avoid buffering the whole file in memory).
+    ensure_upload_root()
+    ext = Path(raw_name).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"unsupported extension: {ext or '(none)'}")
+
+    # For document analysis we need `document.content`.
+    # We only try to extract text for text-like formats to avoid heavy parsing.
+    text_like_exts = {".txt", ".md", ".json", ".csv", ".yaml", ".yml", ".xml", ".html", ".htm"}
+    should_parse_text = ext in text_like_exts
+    text_buf = bytearray()
+    max_parse_bytes = min(settings.MAX_UPLOAD_BYTES, 10 * 1024 * 1024)  # cap memory usage
+
+    storage_key = f"{uuid.uuid4().hex}{ext}"
+    d = attachment_dir(project_id, doc_id)
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / storage_key
+
+    chunk_size = 1024 * 1024
+    total = 0
+    try:
+        with path.open("wb") as out:
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > settings.MAX_UPLOAD_BYTES:
+                    raise HTTPException(413, "File too large")
+                out.write(chunk)
+                if should_parse_text and len(text_buf) < max_parse_bytes:
+                    need = max_parse_bytes - len(text_buf)
+                    text_buf.extend(chunk[:need])
+    except HTTPException:
+        if path.exists():
+            path.unlink(missing_ok=True)
+        raise
+
+    if total <= 0:
+        if path.exists():
+            path.unlink(missing_ok=True)
+        raise HTTPException(400, "Empty file")
+
+    size_b = total
+    mime = file.content_type or "application/octet-stream"
+    att = DocumentAttachment(
+        document_id=doc_id,
+        storage_key=storage_key,
+        original_filename=raw_name,
+        mime_type=mime[:250],
+        size_bytes=size_b,
+        created_by_id=current_user.id,
+    )
+    db.add(att)
+    await db.flush()
+    await db.refresh(att)
+
+    # If this looks like a text document, also hydrate TipTap content.
+    if should_parse_text and len(text_buf) > 0:
+        decoded_text: str = ""
+        try:
+            decoded_text = text_buf.decode("utf-8")
+        except UnicodeDecodeError:
+            decoded_text = text_buf.decode("latin-1", errors="ignore")
+
+        if decoded_text.strip():
+            if ext in {".html", ".htm"}:
+                # Very lightweight HTML stripping to reduce risk.
+                decoded_text = re.sub(r"(?is)<script[^>]*>.*?</script>", " ", decoded_text)
+                decoded_text = re.sub(r"(?is)<style[^>]*>.*?</style>", " ", decoded_text)
+                decoded_text = re.sub(r"(?is)<[^>]+>", " ", decoded_text)
+                decoded_text = html_unescape(decoded_text)
+
+            decoded_text = decoded_text.replace("\r\n", "\n").replace("\r", "\n").strip()
+            paragraphs = [p.strip() for p in re.split(r"\n{2,}", decoded_text) if p.strip()]
+            if not paragraphs:
+                paragraphs = [decoded_text.strip()]
+
+            tiptap_content = {
+                "type": "doc",
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": p}]}
+                    for p in paragraphs
+                ],
+            }
+
+            new_version_num = doc.current_version + 1
+            version = DocumentVersion(
+                document_id=doc_id,
+                version_num=new_version_num,
+                content=tiptap_content,
+                created_by_id=current_user.id,
+                change_summary=f"Imported from attachment: {raw_name}",
+                meeting_id=None,
+            )
+            db.add(version)
+            doc.content = tiptap_content
+            doc.current_version = new_version_num
+            doc.status = DocumentStatus.pending_review
+
+            await db.flush()
+
+    return {
+        "id": att.id,
+        "document_id": doc_id,
+        "original_filename": att.original_filename,
+        "mime_type": att.mime_type,
+        "size_bytes": att.size_bytes,
+        "created_at": att.created_at,
+    }
+
+
+@router.api_route("/{doc_id}/attachments/{attachment_id}/download", methods=["GET", "HEAD"])
+async def download_attachment(
+    project_id: int,
+    doc_id: int,
+    attachment_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    member = await require_project_access(db, project_id, current_user)
+    doc_res = await db.execute(
+        select(Document).where(Document.id == doc_id, Document.project_id == project_id)
+    )
+    doc = doc_res.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    if not can_view_document(member.role, doc.visibility):
+        raise HTTPException(403, "Access denied")
+    att_res = await db.execute(
+        select(DocumentAttachment).where(
+            DocumentAttachment.id == attachment_id,
+            DocumentAttachment.document_id == doc_id,
+        )
+    )
+    att = att_res.scalar_one_or_none()
+    if not att:
+        raise HTTPException(404, "Attachment not found")
+    path = attachment_path(project_id, doc_id, att.storage_key)
+    if not path.is_file():
+        raise HTTPException(404, "File missing on disk")
+    return FileResponse(
+        path,
+        # If the user uploads HTML, serve it as plain text to prevent script execution.
+        media_type=(
+            "text/plain"
+            if (att.original_filename or "").lower().endswith((".html", ".htm"))
+            else att.mime_type
+        ),
+        filename=att.original_filename,
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.delete("/{doc_id}/attachments/{attachment_id}", status_code=204)
+async def delete_attachment(
+    project_id: int,
+    doc_id: int,
+    attachment_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await require_manager_or_developer(db, project_id, current_user)
+    att_res = await db.execute(
+        select(DocumentAttachment).where(
+            DocumentAttachment.id == attachment_id,
+            DocumentAttachment.document_id == doc_id,
+        )
+    )
+    att = att_res.scalar_one_or_none()
+    if not att:
+        raise HTTPException(404, "Attachment not found")
+    delete_attachment_file(project_id, doc_id, att.storage_key)
+    await db.delete(att)
 
 
 @router.put("/{doc_id}")
@@ -187,7 +457,7 @@ async def update_document(
 ):
     await require_manager_or_developer(db, project_id, current_user)
     result = await db.execute(
-        select(Document).options(selectinload(Document.created_by))
+        select(Document).options(selectinload(Document.created_by), selectinload(Document.attachments))
         .where(Document.id == doc_id, Document.project_id == project_id)
     )
     doc = result.scalar_one_or_none()
@@ -197,7 +467,7 @@ async def update_document(
         setattr(doc, field, val)
     await db.flush()
     await db.refresh(doc)
-    await db.refresh(doc, ["created_by"])
+    await db.refresh(doc, ["created_by", "attachments"])
     return _doc_dict(doc)
 
 
@@ -209,10 +479,16 @@ async def delete_document(
     current_user: User = Depends(get_current_user),
 ):
     await require_manager_or_developer(db, project_id, current_user)
-    result = await db.execute(select(Document).where(Document.id == doc_id, Document.project_id == project_id))
+    result = await db.execute(
+        select(Document).options(selectinload(Document.attachments)).where(
+            Document.id == doc_id, Document.project_id == project_id
+        )
+    )
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(404, "Document not found")
+    for a in doc.attachments or []:
+        delete_attachment_file(project_id, doc_id, a.storage_key)
     await db.delete(doc)
 
 

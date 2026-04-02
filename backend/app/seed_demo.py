@@ -23,7 +23,7 @@ from app.models.meeting import (
 from app.models.notification import Notification, NotificationType
 from app.models.project import Project, ProjectStatus, Release
 from app.models.task import Task, TaskLabel, TaskStatus, TaskWatcher
-from app.models.user import ProjectMember, ProjectMemberRole, User, UserRole
+from app.models.user import ProjectMember, ProjectMemberRole, User, UserRole, UserTech
 from app.services.auth import hash_password
 
 
@@ -39,7 +39,103 @@ async def seed_demo_data():
             }
 
         existing = await db.execute(select(User).limit(1))
-        if existing.scalar_one_or_none():
+        any_user_exists = existing.scalar_one_or_none() is not None
+
+        # Backward-compat patch:
+        # old demo projects stored GitLab URLs in `gitlab_repo_url`.
+        # CI/CD UI and GitHub sync expect GitHub repo (owner/repo) now.
+        demo_repo_url_map = {
+            "https://gitlab.com/demo/ecommerce": "octocat/Hello-World",
+            "https://gitlab.com/demo/support-suite": "octocat/Spoon-Knife",
+        }
+
+        async def _patch_demo_project_repos() -> None:
+            if not demo_repo_url_map:
+                return
+            res = await db.execute(
+                select(Project).where(Project.gitlab_repo_url.in_(list(demo_repo_url_map.keys())))
+            )
+            patched = 0
+            for p in res.scalars().all():
+                new_val = demo_repo_url_map.get(p.gitlab_repo_url)
+                if new_val and p.gitlab_repo_url != new_val:
+                    p.gitlab_repo_url = new_val
+                    patched += 1
+            if patched:
+                await db.flush()
+
+        # Если демо-данные уже частично есть (пользователи существуют),
+        # сидер по старой логике вызывался не полностью и мог не создать admin.
+        admin_email = "admin@demo.com"
+        admin_exists_res = await db.execute(select(User).where(User.email == admin_email))
+        admin_exists = admin_exists_res.scalar_one_or_none() is not None
+
+        # Seed tech tags for cabinet matching (so /cabinet/match works immediately).
+        demo_user_techs: dict[str, dict] = {
+            "manager@demo.com": {
+                "git_repo_url": "https://github.com/example/manager-demo",
+                "techs": ["C#", ".NET", "PostgreSQL", "React", "TypeScript"],
+            },
+            "dev@demo.com": {
+                "git_repo_url": "https://github.com/example/fullstack-dev",
+                "techs": ["C#", ".NET", "React", "TypeScript", "FastAPI", "PostgreSQL"],
+            },
+            "qa@demo.com": {
+                "git_repo_url": "https://github.com/example/qa-demo",
+                "techs": ["C#", ".NET", "PostgreSQL", "React"],
+            },
+            "ops@demo.com": {
+                "git_repo_url": "https://github.com/example/ops-demo",
+                "techs": ["CI/CD", "GitHub", "PostgreSQL"],
+            },
+        }
+
+        async def _patch_demo_user_techs() -> None:
+            # Insert missing tech tags + repo links for demo users.
+            for email, payload in demo_user_techs.items():
+                res = await db.execute(select(User).where(User.email == email))
+                u = res.scalar_one_or_none()
+                if not u:
+                    continue
+
+                git_repo_url = (payload.get("git_repo_url") or "").strip() or None
+                if git_repo_url and not getattr(u, "git_repo_url", None):
+                    u.git_repo_url = git_repo_url
+
+                techs = payload.get("techs") or []
+                # Existing techs (case-insensitive)
+                existing_res = await db.execute(select(UserTech.tech).where(UserTech.user_id == u.id))
+                existing_set = {str(x or "").lower() for x in existing_res.scalars().all() if x}
+                to_add = []
+                for t in techs:
+                    tt = (t or "").strip()
+                    if not tt:
+                        continue
+                    if tt.lower() not in existing_set:
+                        to_add.append(tt)
+
+                for t in to_add:
+                    db.add(UserTech(user_id=u.id, tech=t))
+
+            await db.flush()
+
+        if any_user_exists:
+            # Добавляем только недостающего admin, чтобы админка заработала.
+            if not admin_exists:
+                admin_user = User(
+                    email=admin_email,
+                    name="System Admin",
+                    role=UserRole.admin,
+                    hashed_password=hash_password("password"),
+                    is_active=True,
+                )
+                db.add(admin_user)
+                await db.flush()
+
+            # Патчим демо-проекты, у которых поле `gitlab_repo_url` осталось GitLab-URL.
+            await _patch_demo_project_repos()
+            await _patch_demo_user_techs()
+            await db.commit()
             return
 
         manager = User(email="manager@demo.com", name="Alice Product Manager", role=UserRole.manager, hashed_password=hash_password("password"), is_active=True)
@@ -47,20 +143,30 @@ async def seed_demo_data():
         customer = User(email="client@demo.com", name="Carol Client", role=UserRole.customer, hashed_password=hash_password("password"), is_active=True)
         dev2 = User(email="qa@demo.com", name="Dina QA Engineer", role=UserRole.developer, hashed_password=hash_password("password"), is_active=True)
         manager2 = User(email="ops@demo.com", name="Evan Delivery Lead", role=UserRole.manager, hashed_password=hash_password("password"), is_active=True)
-        db.add_all([manager, dev, customer, dev2, manager2])
+        admin_user = User(
+            email="admin@demo.com",
+            name="System Admin",
+            role=UserRole.admin,
+            hashed_password=hash_password("password"),
+            is_active=True,
+        )
+        db.add_all([manager, dev, customer, dev2, manager2, admin_user])
         await db.flush()
+
+        # Save demo cabinet tech tags for newly created demo users.
+        await _patch_demo_user_techs()
 
         project = Project(
             name="E-Commerce Platform",
             description="Unified platform for catalog, checkout, order tracking, and support workflows.",
             status=ProjectStatus.active,
-            gitlab_repo_url="https://gitlab.com/demo/ecommerce",
+            gitlab_repo_url="octocat/Hello-World",
         )
         project2 = Project(
             name="Support Automation Suite",
             description="Ticket triage automation and customer portal with SLA tracking.",
             status=ProjectStatus.active,
-            gitlab_repo_url="https://gitlab.com/demo/support-suite",
+            gitlab_repo_url="octocat/Spoon-Knife",
         )
         db.add_all([project, project2])
         await db.flush()

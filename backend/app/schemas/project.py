@@ -10,6 +10,7 @@ class ProjectBase(BaseModel):
     description: str | None = None
     status: ProjectStatus = ProjectStatus.draft
     gitlab_repo_url: str | None = None
+    gitlab_project_id: int | None = None
 
 
 class ProjectCreate(ProjectBase):
@@ -21,6 +22,7 @@ class ProjectUpdate(BaseModel):
     description: str | None = None
     status: ProjectStatus | None = None
     gitlab_repo_url: str | None = None
+    gitlab_project_id: int | None = None
 
 
 class ProjectRead(ProjectBase):
